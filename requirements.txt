@@ -1,0 +1,9 @@
+# List of required packages for the project
+numpy
+scipy
+pandas
+matplotlib
+seaborn
+scikit-learn
+microns_datacleaner
+cloud-volume
