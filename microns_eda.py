@@ -1060,6 +1060,8 @@ def plot_psth_by_stim(
 def plot_behavior_traces(
     trial: dict,
     pupil_diameter_channel: int = 2,
+    vmin: float | None = 0.0,
+    vmax: float | None = None,
     axes: tuple | None = None,
 ) -> tuple:
     """Pupil and treadmill traces aligned to a single trial's response heatmap.
@@ -1067,11 +1069,23 @@ def plot_behavior_traces(
     Args:
         trial: A single trial dict from ``load_trial``.
         pupil_diameter_channel: pupil channel treated as diameter.
+        vmin: Lower bound of the heatmap color scale. Default 0
+            (responses are typically non-negative).
+        vmax: Upper bound of the heatmap color scale. If None,
+            defaults to the 99th percentile of *this trial's*
+            responses, so a few bright neurons don't compress the
+            rest into near-black. Pass an explicit value (e.g. the
+            99th percentile of the whole-session matrix) to share
+            the scale across multiple plots.
         axes: Optional triple ``(ax_resp, ax_pupil, ax_tread)``. If
             None, a stacked ``(3, 1)`` figure is created.
 
     Returns:
         Tuple ``(fig, (ax_resp, ax_pupil, ax_tread))``.
+
+    Notes:
+        See ``plot_response_heatmap`` for the rationale behind
+        percentile-clipping vmax.
     """
     if axes is None:
         fig, (ax_resp, ax_pupil, ax_tread) = plt.subplots(
@@ -1085,7 +1099,12 @@ def plot_behavior_traces(
 
     responses = trial["responses"]
     order = np.argsort(-responses.mean(axis=1))
-    im = ax_resp.imshow(responses[order], aspect="auto", cmap="magma", interpolation="nearest")
+    if vmax is None:
+        vmax = float(np.percentile(responses, 99))
+    im = ax_resp.imshow(
+        responses[order], aspect="auto", cmap="magma", interpolation="nearest",
+        vmin=vmin, vmax=vmax,
+    )
     ax_resp.set_ylabel("Neuron (sorted)")
     plt.colorbar(im, ax=ax_resp, label="Response")
 
