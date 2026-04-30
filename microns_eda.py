@@ -828,3 +828,38 @@ def plot_trial_timeline(
     ax.legend(handles, list(colors.keys()), loc="upper right", ncol=4, fontsize=8)
     ax.set_xlim(0, starts[-1] + trial_durations[-1])
     return ax
+
+
+def plot_stim_examples(reader, stim_map: dict[str, str]) -> plt.Figure:
+    """Show one mid-clip frame from each of Clip / Monet2 / Trippy.
+
+    Args:
+        reader: A ``MicronsFunctionalReader``.
+        stim_map: Output of ``build_stim_type_map`` for any session
+            (used to find one example hash per stim class).
+
+    Returns:
+        The figure with three subplots, one per stim class.
+
+    Notes:
+        Picks the first hash encountered for each class. The frame
+        shown is the middle frame of the clip.
+    """
+    examples: dict[str, str] = {}
+    for h, t in stim_map.items():
+        if t in {"Clip", "Monet2", "Trippy"} and t not in examples:
+            examples[t] = h
+        if len(examples) == 3:
+            break
+
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+    for ax, stim_type in zip(axes, ["Clip", "Monet2", "Trippy"]):
+        if stim_type in examples:
+            data = reader.get_video_data(examples[stim_type])
+            clip = data["clip"]
+            mid = clip.shape[0] // 2
+            ax.imshow(clip[mid], cmap="gray")
+        ax.set_title(f"{stim_type} (mid-frame)")
+        ax.set_xticks([]); ax.set_yticks([])
+    fig.tight_layout()
+    return fig
