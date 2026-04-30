@@ -844,6 +844,11 @@ def plot_stim_examples(reader, stim_map: dict[str, str]) -> plt.Figure:
     Notes:
         Picks the first hash encountered for each class. The frame
         shown is the middle frame of the clip.
+
+        ``MicronsFunctionalReader.get_video_data`` returns a 2-tuple
+        ``(clip, stim_type)`` where ``clip`` is a ``(frames, width,
+        height)`` array, or ``(None, None)`` if the hash is missing
+        from ``/videos/``.
     """
     examples: dict[str, str] = {}
     for h, t in stim_map.items():
@@ -855,10 +860,12 @@ def plot_stim_examples(reader, stim_map: dict[str, str]) -> plt.Figure:
     fig, axes = plt.subplots(1, 3, figsize=(12, 4))
     for ax, stim_type in zip(axes, ["Clip", "Monet2", "Trippy"]):
         if stim_type in examples:
-            data = reader.get_video_data(examples[stim_type])
-            clip = data["clip"]
-            mid = clip.shape[0] // 2
-            ax.imshow(clip[mid], cmap="gray")
+            clip, _ = reader.get_video_data(examples[stim_type])
+            if clip is not None:
+                mid = clip.shape[0] // 2
+                ax.imshow(clip[mid], cmap="gray")
+            else:
+                ax.text(0.5, 0.5, "video missing", ha="center", va="center")
         ax.set_title(f"{stim_type} (mid-frame)")
         ax.set_xticks([]); ax.set_yticks([])
     fig.tight_layout()
