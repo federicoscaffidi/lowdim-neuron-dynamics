@@ -219,3 +219,6 @@ __marimo__/
 
 # Microns data
 *.h5
+
+# macOS
+.DS_Store
