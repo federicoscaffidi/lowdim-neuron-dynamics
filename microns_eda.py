@@ -870,3 +870,103 @@ def plot_stim_examples(reader, stim_map: dict[str, str]) -> plt.Figure:
         ax.set_xticks([]); ax.set_yticks([])
     fig.tight_layout()
     return fig
+
+
+def plot_response_heatmap(
+    responses: np.ndarray,
+    trial_idx: int,
+    trial_boundaries: np.ndarray,
+    sort_neurons_by_mean: bool = True,
+    ax: plt.Axes | None = None,
+) -> plt.Axes:
+    """Heatmap of one trial's response matrix, neurons × time.
+
+    Args:
+        responses: shape ``(n_neurons, total_timesteps)`` from
+            ``load_session_responses``.
+        trial_idx: 0-based trial index within the session.
+        trial_boundaries: shape ``(n_trials + 1,)``, cumulative
+            timestep counts.
+        sort_neurons_by_mean: If True, sort neurons by their mean
+            response within this trial (descending). Default: True.
+        ax: Optional matplotlib axes.
+
+    Returns:
+        The axes on which the heatmap was drawn.
+
+    Notes:
+        Uses ``imshow`` with ``aspect="auto"`` so the heatmap fits
+        the trial's frame count without distortion.
+    """
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+    start = int(trial_boundaries[trial_idx])
+    end = int(trial_boundaries[trial_idx + 1])
+    trial = responses[:, start:end]
+
+    if sort_neurons_by_mean:
+        order = np.argsort(-trial.mean(axis=1))
+        trial = trial[order]
+
+    im = ax.imshow(trial, aspect="auto", cmap="magma", interpolation="nearest")
+    ax.set_xlabel("Frame within trial")
+    ax.set_ylabel("Neuron (sorted)" if sort_neurons_by_mean else "Neuron")
+    plt.colorbar(im, ax=ax, label="Response")
+    return ax
+
+
+def plot_psth_by_stim(
+    responses: np.ndarray,
+    trial_boundaries: np.ndarray,
+    stim_types_per_trial: np.ndarray,
+    target_length: int = 75,
+    ax: plt.Axes | None = None,
+) -> plt.Axes:
+    """Trial-averaged mean population response per stim class.
+
+    Args:
+        responses: shape ``(n_neurons, total_timesteps)``.
+        trial_boundaries: shape ``(n_trials + 1,)``.
+        stim_types_per_trial: shape ``(n_trials,)``.
+        target_length: timesteps per trial used for averaging. Trials
+            longer than this are truncated to ``target_length``; trials
+            shorter than this are skipped (so a 75-vs-113 mix doesn't
+            silently corrupt the PSTH). Default: 75 (the Clip length).
+        ax: Optional matplotlib axes.
+
+    Returns:
+        The axes on which the PSTHs were drawn.
+
+    Notes:
+        Mean is taken across trials and across neurons, leaving a
+        single trace per stim class as a function of within-trial
+        timestep.
+    """
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(10, 5))
+
+    durations = np.diff(trial_boundaries)
+    n_trials = len(stim_types_per_trial)
+
+    classes = ["Clip", "Monet2", "Trippy"]
+    for cls in classes:
+        traces = []
+        for i in range(n_trials):
+            if stim_types_per_trial[i] != cls:
+                continue
+            if durations[i] < target_length:
+                continue
+            start = int(trial_boundaries[i])
+            trial = responses[:, start:start + target_length]
+            traces.append(trial.mean(axis=0))
+        if not traces:
+            continue
+        mean_trace = np.mean(traces, axis=0)
+        ax.plot(mean_trace, label=f"{cls} (n={len(traces)})")
+
+    ax.set_xlabel("Frame within trial")
+    ax.set_ylabel("Mean population response")
+    ax.set_title(f"PSTH per stim class (first {target_length} frames)")
+    ax.legend()
+    return ax
