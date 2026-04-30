@@ -529,6 +529,67 @@ def flag_outlier_sessions(summary_df: pd.DataFrame, z_thresh: float = 2.0) -> pd
 # (analyzers go here)
 
 
+def compute_behavior_alignment(
+    responses: np.ndarray,
+    trial_boundaries: np.ndarray,
+    pupil_per_trial: list[np.ndarray],
+    treadmill_per_trial: list[np.ndarray],
+    pupil_diameter_channel: int = 2,
+) -> pd.DataFrame:
+    """Per-trial population mean and behavior summaries, with correlations.
+
+    Args:
+        responses: shape ``(n_neurons, total_timesteps)``.
+        trial_boundaries: shape ``(n_trials + 1,)``.
+        pupil_per_trial: list of length ``n_trials``, each a
+            ``(4, n_frames_in_trial)`` array.
+        treadmill_per_trial: list of length ``n_trials``, each a
+            ``(n_frames_in_trial, 1)`` array.
+        pupil_diameter_channel: which channel of pupil to treat as
+            diameter. Default 2; verify in the deep-dive 2e.
+
+    Returns:
+        DataFrame with columns ``mean_response``, ``mean_pupil``,
+        ``mean_treadmill``, indexed by trial. Plus a small attached
+        ``attrs`` dict: ``{"corr_response_pupil": float,
+        "corr_response_treadmill": float}``, the Pearson correlations
+        across trials.
+
+    Notes:
+        NaN-aware: pupil and treadmill frames may be NaN (sensor
+        dropouts). Per-trial means use ``np.nanmean`` and yield NaN if
+        all frames in a trial are NaN. Cross-trial correlations are
+        computed via ``pd.Series.corr`` which pairwise-deletes NaN
+        rows, consistent with the nan-aware aggregation already used
+        in ``summarize_session``.
+    """
+    n_trials = len(trial_boundaries) - 1
+    mean_response = np.empty(n_trials)
+    mean_pupil = np.empty(n_trials)
+    mean_treadmill = np.empty(n_trials)
+
+    def _safe_nanmean(x: np.ndarray) -> float:
+        arr = np.asarray(x)
+        if arr.size == 0 or np.all(np.isnan(arr)):
+            return float("nan")
+        return float(np.nanmean(arr))
+
+    for i in range(n_trials):
+        s, e = int(trial_boundaries[i]), int(trial_boundaries[i + 1])
+        mean_response[i] = float(responses[:, s:e].mean())
+        mean_pupil[i] = _safe_nanmean(pupil_per_trial[i][pupil_diameter_channel])
+        mean_treadmill[i] = _safe_nanmean(treadmill_per_trial[i])
+
+    df = pd.DataFrame({
+        "mean_response": mean_response,
+        "mean_pupil": mean_pupil,
+        "mean_treadmill": mean_treadmill,
+    })
+    df.attrs["corr_response_pupil"] = float(df["mean_response"].corr(df["mean_pupil"]))
+    df.attrs["corr_response_treadmill"] = float(df["mean_response"].corr(df["mean_treadmill"]))
+    return df
+
+
 # =============================================================================
 # (d) Plotting
 # =============================================================================
@@ -994,3 +1055,47 @@ def plot_psth_by_stim(
     ax.set_title(f"PSTH per stim class (first {target_length} frames)")
     ax.legend()
     return ax
+
+
+def plot_behavior_traces(
+    trial: dict,
+    pupil_diameter_channel: int = 2,
+    axes: tuple | None = None,
+) -> tuple:
+    """Pupil and treadmill traces aligned to a single trial's response heatmap.
+
+    Args:
+        trial: A single trial dict from ``load_trial``.
+        pupil_diameter_channel: pupil channel treated as diameter.
+        axes: Optional triple ``(ax_resp, ax_pupil, ax_tread)``. If
+            None, a stacked ``(3, 1)`` figure is created.
+
+    Returns:
+        Tuple ``(fig, (ax_resp, ax_pupil, ax_tread))``.
+    """
+    if axes is None:
+        fig, (ax_resp, ax_pupil, ax_tread) = plt.subplots(
+            3, 1, figsize=(10, 8),
+            gridspec_kw={"height_ratios": [3, 1, 1]},
+            sharex=True,
+        )
+    else:
+        ax_resp, ax_pupil, ax_tread = axes
+        fig = ax_resp.figure
+
+    responses = trial["responses"]
+    order = np.argsort(-responses.mean(axis=1))
+    im = ax_resp.imshow(responses[order], aspect="auto", cmap="magma", interpolation="nearest")
+    ax_resp.set_ylabel("Neuron (sorted)")
+    plt.colorbar(im, ax=ax_resp, label="Response")
+
+    ax_pupil.plot(trial["pupil"][pupil_diameter_channel], color="purple")
+    ax_pupil.set_ylabel("Pupil diameter")
+
+    ax_tread.plot(trial["treadmill"][:, 0], color="orange")
+    ax_tread.set_ylabel("Treadmill speed")
+    ax_tread.set_xlabel("Frame")
+
+    fig.suptitle(f"Trial {trial.get('condition_hash', '?')[:10]}… — {trial.get('stim_type', '?')}")
+    fig.tight_layout()
+    return fig, (ax_resp, ax_pupil, ax_tread)
