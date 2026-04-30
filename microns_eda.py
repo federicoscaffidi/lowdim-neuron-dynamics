@@ -403,10 +403,14 @@ def summarize_session(reader, datadir: str | Path, session: str) -> dict:
                 running_M2 = running_M2 + trial_M2 + (delta ** 2) * (total_count * n_t / new_count)
             total_count = new_count
 
-            pupil_sum += float(pupil[PUPIL_DIAMETER_CHANNEL].sum())
-            pupil_count += int(pupil.shape[1])
-            tread_sum += float(treadmill.sum())
-            tread_count += int(treadmill.size)
+            # Behavior: nan-aware. The eye tracker drops frames as NaN, and
+            # treadmill occasionally has NaN too; ignore them so one bad frame
+            # doesn't poison the whole session's mean.
+            pupil_channel = pupil[PUPIL_DIAMETER_CHANNEL]
+            pupil_sum += float(np.nansum(pupil_channel))
+            pupil_count += int(np.isfinite(pupil_channel).sum())
+            tread_sum += float(np.nansum(treadmill))
+            tread_count += int(np.isfinite(treadmill).sum())
 
             h_raw = condition_hashes[i]
             h = h_raw.decode("utf-8", "replace") if isinstance(h_raw, bytes) else str(h_raw)
@@ -483,6 +487,14 @@ def flag_outlier_sessions(summary_df: pd.DataFrame, z_thresh: float = 2.0) -> pd
         sessions. With 14 sessions a |z|>2 threshold is roughly the
         outer ~5% of a normal-ish distribution; treat it as a flag, not
         a verdict.
+
+        Robustness: a metric whose column is constant across all
+        sessions (std = 0, e.g. ``n_Unknown`` when the library
+        classifies every trial cleanly) yields a z-score of 0 — no
+        flag is raised, since "every session is identical" is not an
+        outlier signal. A metric that is NaN everywhere (e.g. broken
+        sensor) yields NaN z-scores, which never trip the |z| > 2
+        check, so the column is silently ignored.
     """
     metrics = [
         "n_neurons",
@@ -495,7 +507,11 @@ def flag_outlier_sessions(summary_df: pd.DataFrame, z_thresh: float = 2.0) -> pd
     warnings_per_session: list[list[str]] = [[] for _ in range(len(out))]
     for m in metrics:
         col = out[m].astype(float)
-        z = (col - col.mean()) / col.std(ddof=0)
+        std = col.std(ddof=0)
+        if not np.isfinite(std) or std == 0:
+            z = pd.Series(np.zeros(len(col), dtype=float), index=col.index)
+        else:
+            z = (col - col.mean()) / std
         out[f"z_{m}"] = z
         for i, val in enumerate(z.abs() > z_thresh):
             if bool(val):
