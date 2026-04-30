@@ -526,7 +526,111 @@ def flag_outlier_sessions(summary_df: pd.DataFrame, z_thresh: float = 2.0) -> pd
 # =============================================================================
 
 
-# (analyzers go here)
+def compute_neuron_stats(
+    responses: np.ndarray,
+    sparsity_quantile: float = 0.05,
+) -> pd.DataFrame:
+    """Per-neuron summary statistics for the deep-dive session.
+
+    Args:
+        responses: shape ``(n_neurons, total_timesteps)``.
+        sparsity_quantile: quantile that defines the silence threshold
+            *per neuron*. ``sparsity`` is the fraction of timesteps the
+            neuron exceeds its own quantile-of-self. Default 0.05.
+
+    Returns:
+        DataFrame indexed by neuron id (int), with columns:
+
+        - ``mean`` (float): per-neuron mean response.
+        - ``var`` (float): per-neuron variance.
+        - ``std`` (float): sqrt of var.
+        - ``sparsity`` (float): see Args.
+        - ``is_silent`` (bool): True if ``var == 0`` exactly, indicating
+          a neuron that never responds in this session.
+    """
+    means = responses.mean(axis=1)
+    variances = responses.var(axis=1)
+    thresholds = np.quantile(responses, sparsity_quantile, axis=1)
+    sparsity = (responses > thresholds[:, None]).mean(axis=1)
+    return pd.DataFrame({
+        "mean": means,
+        "var": variances,
+        "std": np.sqrt(variances),
+        "sparsity": sparsity,
+        "is_silent": variances == 0,
+    })
+
+
+def compute_correlation_matrix(
+    responses: np.ndarray,
+    n_subsample: int = 2000,
+    seed: int = 42,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Sub-sampled neuron × neuron correlation matrix.
+
+    Args:
+        responses: shape ``(n_neurons, total_timesteps)``.
+        n_subsample: number of neurons to sample without replacement.
+            Capped at ``n_neurons``.
+        seed: RNG seed for the sample.
+
+    Returns:
+        Tuple ``(corr, sampled_indices)``.
+
+        - ``corr``: shape ``(k, k)`` where ``k = min(n_subsample,
+          n_neurons)``. Pearson correlation across timesteps.
+        - ``sampled_indices``: shape ``(k,)``, the neuron indices chosen.
+
+    Notes:
+        Why sub-sample? See the `CORRELATION_SUBSAMPLE_N` note in
+        Part 0 of the notebook.
+    """
+    n = responses.shape[0]
+    k = min(n_subsample, n)
+    rng = np.random.default_rng(seed)
+    sampled_indices = np.sort(rng.choice(n, size=k, replace=False))
+    sub = responses[sampled_indices]
+    corr = np.corrcoef(sub)
+    return corr, sampled_indices
+
+
+def compute_drift(
+    responses: np.ndarray,
+    trial_boundaries: np.ndarray,
+) -> pd.DataFrame:
+    """Mean population activity per trial vs trial index, with a linear fit.
+
+    Args:
+        responses: shape ``(n_neurons, total_timesteps)``.
+        trial_boundaries: shape ``(n_trials + 1,)``.
+
+    Returns:
+        DataFrame indexed by trial number, with columns:
+
+        - ``mean_activity`` (float): mean of all (neuron, time) values
+          in the trial.
+        - ``trend`` (float): the value of a linear OLS fit at this trial
+          index. ``slope`` is identical for every row and stored in
+          ``df.attrs["slope"]``.
+
+    Notes:
+        Use to spot photobleaching (monotonic decrease) or sudden
+        recording artifacts (jumps).
+    """
+    n_trials = len(trial_boundaries) - 1
+    mean_activity = np.empty(n_trials)
+    for i in range(n_trials):
+        s, e = int(trial_boundaries[i]), int(trial_boundaries[i + 1])
+        mean_activity[i] = float(responses[:, s:e].mean())
+
+    x = np.arange(n_trials)
+    slope, intercept = np.polyfit(x, mean_activity, 1)
+    trend = slope * x + intercept
+
+    df = pd.DataFrame({"mean_activity": mean_activity, "trend": trend})
+    df.attrs["slope"] = float(slope)
+    df.attrs["intercept"] = float(intercept)
+    return df
 
 
 def compute_behavior_alignment(
