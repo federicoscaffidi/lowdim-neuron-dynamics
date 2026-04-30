@@ -683,3 +683,78 @@ def plot_outlier_table(summary_df_with_flags: pd.DataFrame) -> pd.DataFrame:
     z_cols = [c for c in summary_df_with_flags.columns if c.startswith("z_")]
     cols = ["n_neurons", "n_Unknown", *z_cols, "warning", "is_outlier"]
     return summary_df_with_flags[cols].copy()
+
+
+def plot_neuron_coords_3d(meta: dict, ax: plt.Axes | None = None) -> plt.Axes:
+    """3D scatter of neuron coordinates colored by brain area.
+
+    Args:
+        meta: Output of ``get_session_meta`` for one session.
+        ax: Optional 3D axes. If None, a new figure with a 3D subplot
+            is created.
+
+    Returns:
+        The 3D axes used for plotting.
+
+    Notes:
+        Coordinates are pial; we invert the z-axis so cortical depth
+        increases downward, matching the professor's tutorial style.
+    """
+    if ax is None:
+        fig = plt.figure(figsize=(8, 8))
+        ax = fig.add_subplot(projection="3d")
+        ax.zaxis.set_inverted(True)
+
+    coords = meta["coordinates"]
+    colors = {"V1": "tab:blue", "AL": "tab:orange", "LM": "tab:green", "RL": "tab:red"}
+    for area, idx in meta["area_indices"].items():
+        ax.scatter(
+            coords[idx, 0], coords[idx, 2], coords[idx, 1],
+            s=3, alpha=0.4, color=colors.get(area, "gray"), label=area,
+        )
+    ax.set_xlabel("x")
+    ax.set_ylabel("z")
+    ax.set_zlabel("y (depth)")
+    ax.legend(markerscale=3)
+    ax.set_title("Neuron positions colored by area")
+    return ax
+
+
+def plot_trial_timeline(
+    stim_types_per_trial: np.ndarray,
+    trial_durations: np.ndarray | None = None,
+    ax: plt.Axes | None = None,
+) -> plt.Axes:
+    """Colored strip showing the stim type for each trial in trial order.
+
+    Args:
+        stim_types_per_trial: shape ``(n_trials,)``, one of
+            ``"Clip" / "Monet2" / "Trippy" / "Unknown"`` per trial.
+        trial_durations: shape ``(n_trials,)``, timesteps per trial.
+            If None, all trials are drawn equal width.
+        ax: Optional matplotlib axes. If None, a new figure is created.
+
+    Returns:
+        The axes on which the strip was drawn.
+
+    Notes:
+        Use to spot blocked vs interleaved experimental designs.
+    """
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(14, 1.4))
+
+    colors = {"Clip": "#1f77b4", "Monet2": "#ff7f0e", "Trippy": "#2ca02c", "Unknown": "#bbbbbb"}
+    n = len(stim_types_per_trial)
+    if trial_durations is None:
+        trial_durations = np.ones(n)
+    starts = np.concatenate(([0], np.cumsum(trial_durations[:-1])))
+    for s, d, t in zip(starts, trial_durations, stim_types_per_trial):
+        ax.barh(0, width=d, left=s, height=1.0, color=colors.get(t, "#bbbbbb"))
+
+    ax.set_yticks([])
+    ax.set_xlabel("Cumulative timesteps" if not np.allclose(trial_durations, 1) else "Trial index")
+    ax.set_title("Trial timeline (colored by stim type)")
+    handles = [plt.Rectangle((0, 0), 1, 1, color=c) for c in colors.values()]
+    ax.legend(handles, list(colors.keys()), loc="upper right", ncol=4, fontsize=8)
+    ax.set_xlim(0, starts[-1] + trial_durations[-1])
+    return ax
