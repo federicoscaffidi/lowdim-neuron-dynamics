@@ -1222,3 +1222,122 @@ def plot_behavior_traces(
     fig.suptitle(f"Trial {trial.get('condition_hash', '?')[:10]}… — {trial.get('stim_type', '?')}")
     fig.tight_layout()
     return fig, (ax_resp, ax_pupil, ax_tread)
+
+
+def plot_neuron_stat_distributions(
+    stats_df: pd.DataFrame,
+    axes: tuple | None = None,
+) -> tuple:
+    """Histograms of per-neuron mean, variance, sparsity, plus log–log mean-vs-var.
+
+    Args:
+        stats_df: Output of ``compute_neuron_stats``.
+        axes: Optional 4-tuple of axes ``(ax_mean, ax_var, ax_sparsity,
+            ax_meanvar)``. If None, a 2×2 figure is created.
+
+    Returns:
+        Tuple ``(fig, (ax_mean, ax_var, ax_sparsity, ax_meanvar))``.
+    """
+    if axes is None:
+        fig, ax_arr = plt.subplots(2, 2, figsize=(12, 9))
+        axes_flat = ax_arr.ravel()
+    else:
+        axes_flat = axes
+        fig = axes_flat[0].figure
+
+    ax_mean, ax_var, ax_sparsity, ax_meanvar = axes_flat
+
+    ax_mean.hist(stats_df["mean"], bins=80, color="steelblue", edgecolor="none")
+    ax_mean.set_title("Per-neuron mean")
+    ax_mean.set_xlabel("mean response")
+    ax_mean.set_ylabel("Neuron count")
+
+    ax_var.hist(stats_df["var"], bins=80, color="firebrick", edgecolor="none", log=True)
+    ax_var.set_title("Per-neuron variance (log y)")
+    ax_var.set_xlabel("variance")
+    ax_var.set_ylabel("Neuron count")
+
+    ax_sparsity.hist(stats_df["sparsity"], bins=40, color="seagreen", edgecolor="none")
+    ax_sparsity.set_title("Per-neuron sparsity")
+    ax_sparsity.set_xlabel("Fraction of timesteps above 5th percentile")
+    ax_sparsity.set_ylabel("Neuron count")
+
+    valid = (stats_df["mean"] > 0) & (stats_df["var"] > 0)
+    ax_meanvar.scatter(
+        stats_df.loc[valid, "mean"],
+        stats_df.loc[valid, "var"],
+        s=4, alpha=0.4, color="black",
+    )
+    ax_meanvar.set_xscale("log")
+    ax_meanvar.set_yscale("log")
+    ax_meanvar.set_xlabel("Mean (log)")
+    ax_meanvar.set_ylabel("Variance (log)")
+    ax_meanvar.set_title("Mean vs variance per neuron (slope ≈ 1 → Poisson; ≈ 2 → multiplicative)")
+
+    fig.tight_layout()
+    return fig, axes_flat
+
+
+def plot_correlation_heatmap(
+    corr: np.ndarray,
+    area_per_neuron: np.ndarray | None = None,
+    ax: plt.Axes | None = None,
+) -> plt.Axes:
+    """Neuron × neuron correlation heatmap, optionally sorted by area.
+
+    Args:
+        corr: shape ``(k, k)``.
+        area_per_neuron: shape ``(k,)``, area string per row of ``corr``.
+            If provided, neurons are reordered so all V1 are contiguous,
+            then AL, LM, RL, and dashed lines are drawn at area
+            boundaries.
+        ax: Optional matplotlib axes.
+
+    Returns:
+        The axes the heatmap was drawn on.
+    """
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(8, 8))
+
+    if area_per_neuron is not None:
+        order_keys = ["V1", "AL", "LM", "RL"]
+        order = np.concatenate([
+            np.where(np.array(area_per_neuron) == k)[0] for k in order_keys
+        ])
+        corr_sorted = corr[order][:, order]
+        boundaries = np.cumsum([np.sum(np.array(area_per_neuron) == k) for k in order_keys[:-1]])
+    else:
+        corr_sorted = corr
+        boundaries = []
+
+    vmax = np.percentile(np.abs(corr_sorted), 99)
+    im = ax.imshow(corr_sorted, cmap="RdBu_r", vmin=-vmax, vmax=vmax, interpolation="nearest")
+    plt.colorbar(im, ax=ax, label="Pearson r")
+    for b in boundaries:
+        ax.axhline(b, color="black", linewidth=0.5, linestyle="--")
+        ax.axvline(b, color="black", linewidth=0.5, linestyle="--")
+    ax.set_title(f"Neuron×neuron correlation ({corr_sorted.shape[0]} neurons)")
+    ax.set_xticks([]); ax.set_yticks([])
+    return ax
+
+
+def plot_drift(drift_df: pd.DataFrame, ax: plt.Axes | None = None) -> plt.Axes:
+    """Mean population activity per trial across the session, with linear fit.
+
+    Args:
+        drift_df: Output of ``compute_drift``.
+        ax: Optional matplotlib axes.
+
+    Returns:
+        The axes the plot was drawn on.
+    """
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(10, 4))
+    ax.plot(drift_df.index, drift_df["mean_activity"], color="steelblue", label="per-trial mean")
+    ax.plot(drift_df.index, drift_df["trend"], color="black", linestyle="--",
+            label=f"linear fit (slope={drift_df.attrs.get('slope', 0):+.2e}/trial)")
+    ax.set_xlabel("Trial index")
+    ax.set_ylabel("Mean population activity")
+    ax.set_title("Drift over trials")
+    ax.legend()
+    return ax
