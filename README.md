@@ -4,7 +4,7 @@ Study the dynamics of neurons in the functional dataset through the lens of dime
 
 ## Notebooks
 
-- [`analysis.ipynb`](analysis.ipynb) — PCA / eigenspectrum / principal angles on session `7_4`.
+- [`ai_prototype/analysis.ipynb`](ai_prototype/analysis.ipynb) — PCA / eigenspectrum / principal angles on session `7_4`.
 - [`eda_microns.ipynb`](eda_microns.ipynb) — Exploratory data analysis on session `7_5` (closest-to-median by neuron count). Cross-session overview, per-session deep-dive (structure, stimuli, neural responses, behavior, preprocessing diagnostics), running-outlier removal, and recommended preprocessing for the dim-reduction phase. Backed by the [`microns_eda`](microns_eda.py) helper module.
 
 Design and plan documents:
