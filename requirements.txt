@@ -8,3 +8,4 @@ scikit-learn
 microns_datacleaner
 cloud-volume
 h5py
+plotly

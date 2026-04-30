@@ -720,6 +720,76 @@ def plot_neuron_coords_3d(meta: dict, ax: plt.Axes | None = None) -> plt.Axes:
     return ax
 
 
+def plot_neuron_coords_3d_interactive(
+    meta: dict,
+    marker_size: float = 2.0,
+    opacity: float = 0.5,
+):
+    """Interactive 3D scatter of neuron coordinates colored by area (plotly).
+
+    Counterpart to ``plot_neuron_coords_3d`` for use in Jupyter, where
+    rotation and zoom help inspect the cortical layout. The matplotlib
+    version remains the right choice for static figures (papers, PDFs);
+    use this one when reading the notebook interactively.
+
+    Args:
+        meta: Output of ``get_session_meta`` for one session. Must
+            contain ``coordinates`` (shape ``(n_neurons, 3)``) and
+            ``area_indices`` (dict mapping area name to neuron-index
+            array).
+        marker_size: Scatter marker size in plotly screen units.
+        opacity: Marker opacity in [0, 1]. Lower values help reveal
+            interior structure when the cloud is dense.
+
+    Returns:
+        A ``plotly.graph_objects.Figure``. Display in a notebook with
+        ``fig.show()``.
+
+    Notes:
+        Axis convention matches the matplotlib version:
+        x = ``coordinates[:, 0]``, y = ``coordinates[:, 2]``,
+        z = ``coordinates[:, 1]`` (depth, axis reversed so deeper
+        neurons sit lower in the plot).
+
+        ``plotly`` is imported lazily so the module can be imported in
+        environments without it.
+    """
+    import plotly.graph_objects as go
+
+    coords = meta["coordinates"]
+    colors = {"V1": "#1f77b4", "AL": "#ff7f0e", "LM": "#2ca02c", "RL": "#d62728"}
+    traces = []
+    for area, idx in meta["area_indices"].items():
+        traces.append(
+            go.Scatter3d(
+                x=coords[idx, 0],
+                y=coords[idx, 2],
+                z=coords[idx, 1],
+                mode="markers",
+                marker=dict(
+                    size=marker_size,
+                    color=colors.get(area, "gray"),
+                    opacity=opacity,
+                ),
+                name=area,
+            )
+        )
+    fig = go.Figure(data=traces)
+    fig.update_layout(
+        title="Neuron positions colored by area",
+        scene=dict(
+            xaxis_title="x",
+            yaxis_title="z",
+            zaxis_title="y (depth)",
+            zaxis=dict(autorange="reversed"),
+        ),
+        legend=dict(title="Area"),
+        margin=dict(l=0, r=0, t=40, b=0),
+        height=600,
+    )
+    return fig
+
+
 def plot_trial_timeline(
     stim_types_per_trial: np.ndarray,
     trial_durations: np.ndarray | None = None,
