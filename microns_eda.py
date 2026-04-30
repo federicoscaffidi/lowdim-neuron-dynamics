@@ -58,7 +58,13 @@ def open_dataset(datadir: str | Path) -> "MicronsFunctionalReader":
 
 @contextmanager
 def open_h5(datadir: str | Path) -> Iterator[h5py.File]:
-    """Open ``{datadir}/microns.h5`` read-only as a context manager.
+    """Open the MICrONS H5 read-only as a context manager.
+
+    The file is expected at ``{datadir}/functional/microns_functional.h5``
+    — the layout ``MicronsFunctionalReader`` looks for. If the file is
+    actually somewhere else on disk (e.g. ``{datadir}/microns.h5`` from a
+    direct download), create a symlink at the expected path; the
+    notebook's setup cell does this automatically when needed.
 
     Used by loaders that need fields ``MicronsFunctionalReader`` does not
     expose: per-trial pupil, treadmill, stim_times, and the per-session
@@ -66,12 +72,13 @@ def open_h5(datadir: str | Path) -> Iterator[h5py.File]:
     condition_hashes).
 
     Args:
-        datadir: Directory containing ``microns.h5``.
+        datadir: Directory containing the ``functional/microns_functional.h5``
+            file (matching the ``MicronsFunctionalReader`` convention).
 
     Yields:
         An open ``h5py.File`` in read-only mode.
     """
-    path = Path(datadir) / "microns.h5"
+    path = Path(datadir) / "functional" / "microns_functional.h5"
     with h5py.File(path, "r") as f:
         yield f
 
