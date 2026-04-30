@@ -877,6 +877,8 @@ def plot_response_heatmap(
     trial_idx: int,
     trial_boundaries: np.ndarray,
     sort_neurons_by_mean: bool = True,
+    vmin: float | None = 0.0,
+    vmax: float | None = None,
     ax: plt.Axes | None = None,
 ) -> plt.Axes:
     """Heatmap of one trial's response matrix, neurons × time.
@@ -889,6 +891,14 @@ def plot_response_heatmap(
             timestep counts.
         sort_neurons_by_mean: If True, sort neurons by their mean
             response within this trial (descending). Default: True.
+        vmin: Lower bound of the color scale. Defaults to 0
+            (responses are typically non-negative).
+        vmax: Upper bound of the color scale. If None, defaults to
+            the 99th percentile of the *whole-session* responses
+            matrix — not the trial — so a few bright neurons don't
+            wash out the structure visible in the rest. Pass an
+            explicit value when comparing multiple trials so all
+            heatmaps share a scale.
         ax: Optional matplotlib axes.
 
     Returns:
@@ -897,6 +907,14 @@ def plot_response_heatmap(
     Notes:
         Uses ``imshow`` with ``aspect="auto"`` so the heatmap fits
         the trial's frame count without distortion.
+
+        Why percentile-clipping vmax? Per-neuron variance spans
+        several orders of magnitude in MICrONS — a tiny minority of
+        neurons hit values in the hundreds, while the bulk live in
+        ~0–10. Linear-scaling the colormap against the maximum
+        compresses the typical range to nearly black, hiding the
+        structure that matters. Clipping at the 99th percentile
+        recovers visible detail.
     """
     if ax is None:
         fig, ax = plt.subplots(figsize=(10, 6))
@@ -909,7 +927,13 @@ def plot_response_heatmap(
         order = np.argsort(-trial.mean(axis=1))
         trial = trial[order]
 
-    im = ax.imshow(trial, aspect="auto", cmap="magma", interpolation="nearest")
+    if vmax is None:
+        vmax = float(np.percentile(responses, 99))
+
+    im = ax.imshow(
+        trial, aspect="auto", cmap="magma", interpolation="nearest",
+        vmin=vmin, vmax=vmax,
+    )
     ax.set_xlabel("Frame within trial")
     ax.set_ylabel("Neuron (sorted)" if sort_neurons_by_mean else "Neuron")
     plt.colorbar(im, ax=ax, label="Response")
