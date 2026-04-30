@@ -781,7 +781,7 @@ def plot_response_magnitude_by_session(
                 count += r.shape[1]
         per_session_means.append(sums / max(count, 1))
 
-    ax.boxplot(per_session_means, labels=sessions, showfliers=False)
+    ax.boxplot(per_session_means, tick_labels=sessions, showfliers=False)
     ax.set_ylabel("Per-neuron mean response")
     ax.set_xlabel("Session")
     ax.set_title("Per-neuron mean response distribution by session")
