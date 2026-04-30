@@ -511,4 +511,152 @@ def flag_outlier_sessions(summary_df: pd.DataFrame, z_thresh: float = 2.0) -> pd
 # =============================================================================
 
 
-# (plotters go here)
+def plot_cross_session_overview(
+    summary_df: pd.DataFrame,
+    axes: tuple | None = None,
+) -> tuple:
+    """Bar plots: neurons by area (stacked) and trials by stim type per session.
+
+    Args:
+        summary_df: Output of ``summarize_all_sessions``.
+        axes: Optional pair of matplotlib axes ``(ax_neurons, ax_stim)``.
+            If None, a new ``(2, 1)`` figure is created.
+
+    Returns:
+        Tuple ``(fig, (ax_neurons, ax_stim))``.
+
+    Notes:
+        Useful for visually spotting sessions whose neuron count or stim
+        distribution differs structurally from the rest.
+    """
+    if axes is None:
+        fig, (ax_neurons, ax_stim) = plt.subplots(2, 1, figsize=(12, 8))
+    else:
+        ax_neurons, ax_stim = axes
+        fig = ax_neurons.figure
+
+    area_cols = [c for c in ["n_V1", "n_AL", "n_LM", "n_RL"] if c in summary_df.columns]
+    summary_df[area_cols].plot.bar(stacked=True, ax=ax_neurons)
+    ax_neurons.set_ylabel("Neuron count")
+    ax_neurons.set_title("Neurons per session, stacked by area")
+    ax_neurons.tick_params(axis="x", rotation=45)
+
+    stim_cols = ["n_Clip", "n_Monet2", "n_Trippy", "n_Unknown"]
+    summary_df[stim_cols].plot.bar(ax=ax_stim)
+    ax_stim.set_ylabel("Trial count")
+    ax_stim.set_title("Trials per stim class, per session")
+    ax_stim.tick_params(axis="x", rotation=45)
+
+    fig.tight_layout()
+    return fig, (ax_neurons, ax_stim)
+
+
+def plot_response_magnitude_by_session(
+    reader,
+    datadir: str | Path,
+    ax: plt.Axes | None = None,
+) -> plt.Axes:
+    """Boxplot of per-neuron mean response across sessions.
+
+    Args:
+        reader: A ``MicronsFunctionalReader``.
+        datadir: Directory containing ``microns.h5``.
+        ax: Optional matplotlib axes. If None, a new figure is created.
+
+    Returns:
+        The axes on which the boxplot was drawn.
+
+    Notes:
+        For each session, computes per-neuron mean response (averaging
+        every neuron over every timestep in the session) and draws one
+        box per session. Outliers indicate possible imaging-quality
+        issues (calibration drift, photobleaching).
+
+        This is a heavy operation (streams every session). Cache the
+        result if you call it more than once.
+    """
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(12, 5))
+
+    sessions = list_sessions(datadir)
+    per_session_means: list[np.ndarray] = []
+    for s in sessions:
+        meta = get_session_meta(datadir, s)
+        n_neurons = meta["n_neurons"]
+        sums = np.zeros(n_neurons, dtype=np.float64)
+        count = 0
+        with open_h5(datadir) as f:
+            trials_grp = f["sessions"][s]["trials"]
+            for i in range(meta["n_trials"]):
+                r = trials_grp[str(i)]["responses"][...]
+                sums += r.sum(axis=1)
+                count += r.shape[1]
+        per_session_means.append(sums / max(count, 1))
+
+    ax.boxplot(per_session_means, labels=sessions, showfliers=False)
+    ax.set_ylabel("Per-neuron mean response")
+    ax.set_xlabel("Session")
+    ax.set_title("Per-neuron mean response distribution by session")
+    ax.tick_params(axis="x", rotation=45)
+    return ax
+
+
+def plot_behavior_by_session(
+    summary_df: pd.DataFrame,
+    axes: tuple | None = None,
+) -> tuple:
+    """Per-session bar plot of mean pupil diameter and mean treadmill speed.
+
+    Args:
+        summary_df: Output of ``summarize_all_sessions``.
+        axes: Optional pair ``(ax_pupil, ax_tread)``. If None, a
+            ``(2, 1)`` figure is created.
+
+    Returns:
+        Tuple ``(fig, (ax_pupil, ax_tread))``.
+
+    Notes:
+        Pupil mean is taken from the diameter channel only (see
+        ``summarize_session`` notes). Treadmill mean uses the full
+        signed value; large positive values indicate forward running.
+    """
+    if axes is None:
+        fig, (ax_pupil, ax_tread) = plt.subplots(2, 1, figsize=(12, 6))
+    else:
+        ax_pupil, ax_tread = axes
+        fig = ax_pupil.figure
+
+    summary_df["mean_pupil_diameter"].plot.bar(ax=ax_pupil, color="purple")
+    ax_pupil.set_ylabel("Mean pupil diameter")
+    ax_pupil.set_title("Mean pupil diameter per session")
+    ax_pupil.tick_params(axis="x", rotation=45)
+
+    summary_df["mean_treadmill_speed"].plot.bar(ax=ax_tread, color="orange")
+    ax_tread.set_ylabel("Mean treadmill speed")
+    ax_tread.set_title("Mean treadmill speed per session")
+    ax_tread.tick_params(axis="x", rotation=45)
+
+    fig.tight_layout()
+    return fig, (ax_pupil, ax_tread)
+
+
+def plot_outlier_table(summary_df_with_flags: pd.DataFrame) -> pd.DataFrame:
+    """Return a styled view of the outlier flag table.
+
+    Args:
+        summary_df_with_flags: Output of ``flag_outlier_sessions``.
+
+    Returns:
+        A DataFrame containing the outlier-relevant columns
+        (``warning``, ``is_outlier``, all ``z_*`` columns, plus
+        ``n_neurons`` and ``n_Unknown``). Render in a notebook by
+        returning the result from a cell.
+
+    Notes:
+        Kept simple — Jupyter renders DataFrames natively. We don't
+        build a styled HTML object because that complicates downstream
+        copy/paste into reports.
+    """
+    z_cols = [c for c in summary_df_with_flags.columns if c.startswith("z_")]
+    cols = ["n_neurons", "n_Unknown", *z_cols, "warning", "is_outlier"]
+    return summary_df_with_flags[cols].copy()
