@@ -82,12 +82,14 @@ def preprocess_responses(
         is not modified.
 
     Notes:
-        Detrending uses ``np.polyfit`` with degree 1 per neuron, vectorised
-        via the numpy least-squares route (``np.linalg.lstsq``). Z-scoring
-        guards against zero-std neurons (none expected after EDA's silent-
-        neuron check, but defensive: zero-std rows are returned as zeros).
+        Detrending uses an analytical closed-form OLS (slope =
+        sum((t - t_mean) * (x - x_mean)) / sum((t - t_mean)^2)) computed
+        in a fully vectorised form across all neurons at once, avoiding
+        a Python loop. Z-scoring guards against zero-std neurons (none
+        expected after EDA's silent-neuron check, but defensive: zero-std
+        rows are returned as zeros).
     """
-    n_neurons, n_timesteps = responses.shape
+    _, n_timesteps = responses.shape
 
     # Step 1: optional log transform.
     x = np.log1p(responses) if apply_log else responses.astype(np.float64, copy=True)
