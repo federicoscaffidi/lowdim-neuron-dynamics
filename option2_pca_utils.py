@@ -867,6 +867,225 @@ def plot_classifier_with_null(
     )
 
 
+def plot_cross_area_grid(
+    area_results: dict[str, dict],
+    labels: np.ndarray,
+    *,
+    figsize: tuple[float, float] = (12, 10),
+) -> plt.Figure:
+    """2 × 2 grid of 2-D PC scatters, one panel per cortical area.
+
+    All panels use the same colour and marker conventions; only the
+    *pattern* of cluster separation is comparable across panels because
+    each area's PCs are fit independently.
+
+    Args:
+        area_results: dict from area name to the dict returned by
+            :func:`run_area_pipeline`.
+        labels: shape ``(n_trials,)`` — same labels used in every PCA.
+        figsize: figure size. Default (12, 10) gives ~6×5 per panel.
+
+    Returns:
+        The created Figure. Caller saves with ``fig.savefig(path)``.
+
+    Notes:
+        Areas not present in ``area_results`` produce empty panels.
+        Default panel order: V1 (top-left), AL (top-right), LM (bottom-
+        left), RL (bottom-right) — the canonical visual-cortex layout.
+    """
+    layout = [["V1", "AL"], ["LM", "RL"]]
+    fig, axes = plt.subplots(2, 2, figsize=figsize)
+    for r in range(2):
+        for c in range(2):
+            area = layout[r][c]
+            ax = axes[r][c]
+            if area not in area_results:
+                ax.set_visible(False)
+                continue
+            res = area_results[area]
+            # show_legend=False so we can render a single shared figure-level
+            # legend below (Task 6 modification — keeps panels uncluttered).
+            plot_pca_2d(
+                res["X_pcs"], labels, area_name=area, pca=res["pca"], ax=ax,
+                show_legend=False,
+            )
+
+    # Collect handles+labels from the first panel that drew something, for a single shared legend.
+    handles, panel_labels = None, None
+    for r in range(2):
+        for c in range(2):
+            ax = axes[r][c]
+            if ax.get_visible() and ax.has_data():
+                h, l = ax.get_legend_handles_labels()
+                if h:
+                    handles, panel_labels = h, l
+                    break
+        if handles is not None:
+            break
+
+    if handles:
+        fig.legend(handles, panel_labels, loc="lower center", ncol=len(handles),
+                   bbox_to_anchor=(0.5, -0.02), fontsize=9, framealpha=0.9)
+
+    fig.suptitle(
+        "Per-area trial geometry (PC axes are area-specific; "
+        "compare cluster separation, not coordinates)",
+        fontsize=11, y=1.00,
+    )
+    fig.tight_layout()
+    return fig
+
+
+def plot_cross_area_metric_bars(
+    area_results: dict[str, dict],
+    metric: str,
+    *,
+    chance: float | None = None,
+    ax: plt.Axes | None = None,
+) -> plt.Axes:
+    """Per-area bar chart of observed metric with null distribution overlay.
+
+    Args:
+        area_results: dict from area name to the dict returned by
+            :func:`run_area_pipeline`.
+        metric: ``"silhouette"`` or ``"classifier"``.
+        chance: optional reference line (e.g. majority-class baseline for
+            classifier).
+        ax: matplotlib axes; created if None.
+
+    Returns:
+        The axes drawn on.
+
+    Notes:
+        Each bar shows the observed value. Behind it, the area's null
+        distribution is rendered as a thin grey vertical IQR range with a
+        white median tick — so the reader sees significance at a glance.
+        Empirical p-values are annotated above each bar.
+    """
+    if ax is None:
+        _, ax = plt.subplots(figsize=(7, 4.5))
+
+    if metric not in ("silhouette", "classifier"):
+        raise ValueError(f"metric must be 'silhouette' or 'classifier', got {metric!r}")
+
+    metric_label = (
+        "Balanced silhouette (top-3 PCs)" if metric == "silhouette"
+        else "CV accuracy (5-fold logistic regression)"
+    )
+
+    areas = list(area_results.keys())
+    observed = np.array([area_results[a][metric]["observed"] for a in areas])
+    nulls = [area_results[a][metric]["null"] for a in areas]
+    p_values = [area_results[a][metric]["empirical_p"] for a in areas]
+
+    x = np.arange(len(areas))
+    bars = ax.bar(x, observed, color="steelblue", alpha=0.85, edgecolor="black")
+
+    # Overlay null IQR as a thin range behind/over each bar.
+    for i, null in enumerate(nulls):
+        q05 = np.quantile(null, 0.05)
+        q50 = np.quantile(null, 0.50)
+        q95 = np.quantile(null, 0.95)
+        ax.vlines(x[i], q05, q95, color="darkgrey", linewidth=2, zorder=3)
+        ax.scatter(x[i], q50, color="white", edgecolor="darkgrey",
+                   s=30, zorder=4, marker="_", linewidths=2)
+
+    # Empirical p-values above bars.
+    y_max = ax.get_ylim()[1]
+    for i, p in enumerate(p_values):
+        sig = "*" if p < 0.05 else "ns"
+        ax.text(x[i], observed[i] + 0.02 * y_max,
+                f"p={p:.3f}\n{sig}",
+                ha="center", va="bottom", fontsize=8)
+
+    if chance is not None:
+        ax.axhline(chance, color="grey", linestyle="--", linewidth=1.2,
+                   label=f"chance = {chance:.3f}")
+        ax.legend(loc="best", fontsize=8)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(areas)
+    ax.set_xlabel("Cortical area")
+    ax.set_ylabel(metric_label)
+    ax.set_title(f"Per-area {metric_label} with null IQR (5–95%)")
+    ax.grid(True, alpha=0.3, axis="y")
+    return ax
+
+
+def plot_population_matched_comparison(
+    full_results: dict[str, dict],
+    matched_results: dict[str, list[dict]],
+    metric: str,
+    *,
+    ax: plt.Axes | None = None,
+) -> plt.Axes:
+    """Paired bars per area: observed metric for all-neurons vs matched.
+
+    Args:
+        full_results: ``area -> run_area_pipeline result`` (all neurons).
+        matched_results: ``area -> list of run_area_pipeline results``,
+            one per random subsample at the matched neuron count. The
+            anchor area (e.g. AL) is run once and provided as a 1-element
+            list; other areas have N entries (typically 20).
+        metric: ``"silhouette"`` or ``"classifier"``.
+        ax: matplotlib axes; created if None.
+
+    Returns:
+        The axes drawn on.
+
+    Notes:
+        Each "matched" bar shows the median over subsamples; vertical bar
+        encodes IQR. Each "all-neurons" bar shows the single observed
+        value. Two bars per area, side-by-side.
+    """
+    if ax is None:
+        _, ax = plt.subplots(figsize=(8, 4.5))
+
+    if metric not in ("silhouette", "classifier"):
+        raise ValueError(f"metric must be 'silhouette' or 'classifier', got {metric!r}")
+
+    areas = list(full_results.keys())
+    full_obs = np.array([full_results[a][metric]["observed"] for a in areas])
+    matched_obs = []
+    matched_q25 = []
+    matched_q75 = []
+    for a in areas:
+        vals = np.array([r[metric]["observed"] for r in matched_results[a]])
+        matched_obs.append(np.median(vals))
+        matched_q25.append(np.quantile(vals, 0.25))
+        matched_q75.append(np.quantile(vals, 0.75))
+    matched_obs = np.array(matched_obs)
+    matched_q25 = np.array(matched_q25)
+    matched_q75 = np.array(matched_q75)
+
+    x = np.arange(len(areas))
+    bar_width = 0.35
+    ax.bar(x - bar_width / 2, full_obs, width=bar_width,
+           color="steelblue", alpha=0.85, edgecolor="black", label="all neurons")
+    ax.bar(x + bar_width / 2, matched_obs, width=bar_width,
+           color="lightcoral", alpha=0.85, edgecolor="black",
+           label="matched to AL n_neurons (median)")
+    # IQR error bars on the matched group.
+    matched_lower = matched_obs - matched_q25
+    matched_upper = matched_q75 - matched_obs
+    ax.errorbar(x + bar_width / 2, matched_obs,
+                yerr=np.vstack([matched_lower, matched_upper]),
+                fmt="none", ecolor="darkred", capsize=4, linewidth=1.5)
+
+    metric_label = (
+        "Balanced silhouette (top-3 PCs)" if metric == "silhouette"
+        else "CV accuracy"
+    )
+    ax.set_xticks(x)
+    ax.set_xticklabels(areas)
+    ax.set_xlabel("Cortical area")
+    ax.set_ylabel(metric_label)
+    ax.set_title(f"All-neurons vs population-matched — {metric_label}")
+    ax.legend(loc="best", fontsize=8)
+    ax.grid(True, alpha=0.3, axis="y")
+    return ax
+
+
 # =============================================================================
 # (d) Cross-session aggregation
 # =============================================================================
