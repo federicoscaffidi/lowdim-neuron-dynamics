@@ -395,9 +395,11 @@ def classify_cv(
           comparison.
 
     Notes:
-        The classifier is ``LogisticRegression(multi_class="multinomial",
-        solver="lbfgs", max_iter=1000, C=1.0, random_state=seed)``. L2
-        regularisation at default strength is appropriate when the feature
+        The classifier is ``LogisticRegression(solver="lbfgs", max_iter=1000,
+        C=1.0, random_state=seed)``. With ``solver="lbfgs"`` and multi-class
+        data, sklearn defaults to multinomial logistic regression (the
+        behavior of the deprecated ``multi_class="multinomial"`` argument).
+        L2 regularisation at default strength is appropriate when the feature
         matrix has more columns than rows (e.g., V1 has 5485 features and
         only 453 samples).
     """
@@ -407,7 +409,6 @@ def classify_cv(
 
     skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=seed)
     clf = LogisticRegression(
-        multi_class="multinomial",
         solver="lbfgs",
         max_iter=1000,
         C=1.0,
