@@ -694,6 +694,48 @@ def compute_behavior_alignment(
     return df
 
 
+def compute_clean_trial_indices(
+    per_trial_tread_means: np.ndarray,
+    *,
+    threshold: float = 1.0,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Identify trials surviving the running-outlier filter.
+
+    Trials with mean treadmill speed exceeding ``threshold`` (in absolute
+    value) are flagged as running outliers and dropped. The default
+    threshold of 1.0 was set in the EDA after the per-trial behavior–response
+    correlation revealed that the treadmill confound (Pearson r ≈ −0.39)
+    was driven by a small minority of running trials; dropping them lowered
+    |r| to ~0.22, and was adopted as the project-wide cleaning rule.
+
+    Args:
+        per_trial_tread_means: shape ``(n_trials,)``, the per-trial mean
+            treadmill speed (typically computed with ``np.nanmean``).
+        threshold: trials with ``|per_trial_tread_means[i]| > threshold``
+            are dropped.
+
+    Returns:
+        Tuple ``(clean_trial_indices, running_mask)``.
+
+        - ``clean_trial_indices`` (np.ndarray of int): indices of trials to
+          KEEP (i.e. trials that did NOT exceed the threshold), in original
+          trial order. Length = ``n_trials - running_mask.sum()``.
+        - ``running_mask`` (np.ndarray of bool): shape ``(n_trials,)``;
+          ``True`` for trials that exceeded the threshold (i.e. dropped
+          trials). Useful for diagnostics, e.g. checking which stim classes
+          the dropped trials belonged to.
+
+    Notes:
+        Both outputs are derived from a single boolean comparison; the
+        function is provided as a single point of truth so the EDA and
+        downstream analyses (PCA, CEBRA) all use the same rule.
+    """
+    running_mask = np.abs(per_trial_tread_means) > threshold
+    keep_mask = ~running_mask
+    clean_trial_indices = np.where(keep_mask)[0]
+    return clean_trial_indices, running_mask
+
+
 # =============================================================================
 # (d) Plotting
 # =============================================================================
