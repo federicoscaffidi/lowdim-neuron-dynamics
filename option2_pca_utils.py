@@ -606,7 +606,257 @@ def run_area_pipeline(
 # =============================================================================
 
 
-# (plotters go here)
+def plot_pca_2d(
+    X_pcs: np.ndarray,
+    labels: np.ndarray,
+    area_name: str,
+    pca: PCA,
+    *,
+    ax: plt.Axes | None = None,
+) -> plt.Axes:
+    """2-D scatter of trials in the PC1–PC2 plane, coloured by stim class.
+
+    Distinct markers per class (Clip=circle, Monet2=triangle, Trippy=square)
+    so the minority classes (38 trials each in `7_5`) remain readable next
+    to Clip's 377 trials. Class centroids are overlaid as crosses.
+
+    Args:
+        X_pcs: shape ``(n_trials, >=2)`` — needs at least PC1 and PC2.
+        labels: shape ``(n_trials,)`` — stim class per trial.
+        area_name: used in title.
+        pca: fitted PCA, used to extract variance-explained for axis labels.
+        ax: matplotlib axes to draw on; created if None.
+
+    Returns:
+        The axes drawn on.
+    """
+    if ax is None:
+        _, ax = plt.subplots(figsize=(6, 5))
+
+    label_arr = np.asarray(labels)
+    for stim in STIM_ORDER:
+        mask = label_arr == stim
+        if not mask.any():
+            continue
+        # Larger markers + black edge for minority classes; the visual is
+        # otherwise dominated by Clip.
+        size = 25 if stim == "Clip" else 60
+        ax.scatter(
+            X_pcs[mask, 0], X_pcs[mask, 1],
+            c=STIM_COLORS[stim], marker=STIM_MARKERS[stim],
+            s=size, alpha=0.7, edgecolor="black" if stim != "Clip" else "none",
+            linewidth=0.5, label=f"{stim} (n={mask.sum()})",
+        )
+        # Centroid as a large cross.
+        cx = X_pcs[mask, 0].mean()
+        cy = X_pcs[mask, 1].mean()
+        ax.scatter(
+            cx, cy, c=STIM_COLORS[stim], marker="x",
+            s=200, linewidths=3, zorder=5,
+        )
+
+    pc1_var = 100 * pca.explained_variance_ratio_[0]
+    pc2_var = 100 * pca.explained_variance_ratio_[1]
+    ax.set_xlabel(f"PC1 ({pc1_var:.1f}% var.)")
+    ax.set_ylabel(f"PC2 ({pc2_var:.1f}% var.)")
+    ax.set_title(f"{area_name} — trials in PC1–PC2")
+    ax.legend(loc="best", fontsize=8, framealpha=0.9)
+    ax.grid(True, alpha=0.3)
+    return ax
+
+
+def plot_pca_3d_plotly(
+    X_pcs: np.ndarray,
+    labels: np.ndarray,
+    area_name: str,
+    pca: PCA,
+):
+    """Interactive 3-D scatter (PC1 / PC2 / PC3) for the oral presentation.
+
+    Uses ``plotly.graph_objects`` directly so we can control marker shape
+    and size per class explicitly (``plotly.express`` does not expose these
+    cleanly when colour and symbol are both categorical).
+
+    Args:
+        X_pcs: shape ``(n_trials, >=3)``.
+        labels: shape ``(n_trials,)``.
+        area_name: used in title.
+        pca: fitted PCA, used to extract variance-explained for axis labels.
+
+    Returns:
+        ``plotly.graph_objects.Figure``. Caller saves with ``fig.write_html(path)``.
+    """
+    import plotly.graph_objects as go
+
+    label_arr = np.asarray(labels)
+    fig = go.Figure()
+
+    # Plotly-compatible marker symbols (circle / triangle-up / square equivalents).
+    plotly_symbols = {"Clip": "circle", "Monet2": "diamond", "Trippy": "square"}
+
+    for stim in STIM_ORDER:
+        mask = label_arr == stim
+        if not mask.any():
+            continue
+        size = 4 if stim == "Clip" else 7
+        fig.add_trace(go.Scatter3d(
+            x=X_pcs[mask, 0], y=X_pcs[mask, 1], z=X_pcs[mask, 2],
+            mode="markers",
+            marker=dict(
+                size=size,
+                color=STIM_COLORS[stim],
+                symbol=plotly_symbols[stim],
+                opacity=0.75,
+                line=dict(width=0.5, color="black") if stim != "Clip" else dict(width=0),
+            ),
+            name=f"{stim} (n={int(mask.sum())})",
+        ))
+
+    pc_var = 100 * pca.explained_variance_ratio_[:3]
+    fig.update_layout(
+        title=f"{area_name} — trials in PC1–PC2–PC3",
+        scene=dict(
+            xaxis_title=f"PC1 ({pc_var[0]:.1f}% var.)",
+            yaxis_title=f"PC2 ({pc_var[1]:.1f}% var.)",
+            zaxis_title=f"PC3 ({pc_var[2]:.1f}% var.)",
+        ),
+        legend=dict(itemsizing="constant"),
+        width=800, height=650,
+        margin=dict(l=0, r=0, t=40, b=0),
+    )
+    return fig
+
+
+def plot_scree(
+    pca: PCA,
+    area_name: str,
+    *,
+    n_show: int = 20,
+    ax: plt.Axes | None = None,
+) -> plt.Axes:
+    """Bar plot of per-PC variance ratios with cumulative-sum line.
+
+    Args:
+        pca: fitted PCA. Must have at least ``min(n_show, n_components)`` PCs.
+        area_name: used in title.
+        n_show: number of PCs to display. If the PCA has fewer components
+            than this, all are shown.
+        ax: matplotlib axes; created if None.
+
+    Returns:
+        The axes drawn on.
+    """
+    if ax is None:
+        _, ax = plt.subplots(figsize=(7, 4))
+
+    n_show = min(n_show, len(pca.explained_variance_ratio_))
+    var_ratios = pca.explained_variance_ratio_[:n_show]
+    cumulative = np.cumsum(var_ratios)
+    indices = np.arange(1, n_show + 1)
+
+    ax.bar(indices, var_ratios * 100, color="steelblue", alpha=0.8, label="per-PC")
+    ax2 = ax.twinx()
+    ax2.plot(indices, cumulative * 100, "o-", color="darkred", label="cumulative")
+    ax2.set_ylabel("Cumulative variance (%)", color="darkred")
+    ax2.tick_params(axis="y", labelcolor="darkred")
+    ax2.set_ylim(0, 100)
+
+    # Top-3 reference annotation.
+    top3 = cumulative[2] * 100 if n_show >= 3 else cumulative[-1] * 100
+    ax.axvline(3, color="grey", linestyle="--", alpha=0.5)
+    ax.text(3.1, ax.get_ylim()[1] * 0.95, f"top 3 = {top3:.1f}%",
+            color="grey", fontsize=9, va="top")
+
+    ax.set_xlabel("Principal component")
+    ax.set_ylabel("Variance explained (%)")
+    ax.set_title(f"{area_name} — scree (top {n_show} PCs)")
+    ax.set_xticks(indices)
+    ax.grid(True, alpha=0.3, axis="y")
+    return ax
+
+
+def _plot_metric_with_null(
+    observed: float,
+    null_distribution: np.ndarray,
+    area_name: str,
+    metric_label: str,
+    *,
+    chance: float | None = None,
+    ax: plt.Axes | None = None,
+) -> plt.Axes:
+    """Internal: histogram of a null distribution with the observed value overlaid."""
+    if ax is None:
+        _, ax = plt.subplots(figsize=(6, 4))
+
+    ax.hist(null_distribution, bins=20, color="lightgrey",
+            edgecolor="black", linewidth=0.5, label="null (shuffled labels)")
+    ax.axvline(observed, color="darkred", linewidth=2, label=f"observed = {observed:.3f}")
+    if chance is not None:
+        ax.axvline(chance, color="grey", linestyle="--", linewidth=1.5,
+                   label=f"chance = {chance:.3f}")
+
+    n_shuffles = len(null_distribution)
+    p = (1 + (null_distribution >= observed).sum()) / (1 + n_shuffles)
+    ax.set_xlabel(metric_label)
+    ax.set_ylabel("Count")
+    ax.set_title(
+        f"{area_name} — {metric_label} (empirical p = {p:.3f}, "
+        f"n_shuffles = {n_shuffles})"
+    )
+    ax.legend(loc="best", fontsize=8)
+    return ax
+
+
+def plot_silhouette_with_null(
+    observed: float,
+    null_distribution: np.ndarray,
+    area_name: str,
+    *,
+    ax: plt.Axes | None = None,
+) -> plt.Axes:
+    """Histogram of the silhouette null with the observed value overlaid.
+
+    Args:
+        observed: observed balanced silhouette (mean over replicates).
+        null_distribution: shape ``(n_shuffles,)`` from
+            :func:`silhouette_balanced_null`.
+        area_name: used in title.
+        ax: matplotlib axes; created if None.
+
+    Returns:
+        The axes drawn on.
+    """
+    return _plot_metric_with_null(
+        observed, null_distribution, area_name,
+        metric_label="balanced silhouette (top-3 PCs)", ax=ax,
+    )
+
+
+def plot_classifier_with_null(
+    observed: float,
+    null_distribution: np.ndarray,
+    area_name: str,
+    chance: float,
+    *,
+    ax: plt.Axes | None = None,
+) -> plt.Axes:
+    """Histogram of the classifier null with observed and chance overlaid.
+
+    Args:
+        observed: observed CV accuracy.
+        null_distribution: shape ``(n_shuffles,)`` from :func:`classify_cv_null`.
+        area_name: used in title.
+        chance: majority-class baseline accuracy from :func:`classify_cv`.
+        ax: matplotlib axes; created if None.
+
+    Returns:
+        The axes drawn on.
+    """
+    return _plot_metric_with_null(
+        observed, null_distribution, area_name,
+        metric_label="CV accuracy (5-fold logistic regression)",
+        chance=chance, ax=ax,
+    )
 
 
 # =============================================================================
