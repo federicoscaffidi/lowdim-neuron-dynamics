@@ -21,12 +21,14 @@ Design constraints (see docs/specs/2026-05-02-pca-design.md):
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.decomposition import PCA
+from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import silhouette_score
 from sklearn.model_selection import StratifiedKFold, cross_val_score
@@ -393,15 +395,21 @@ def classify_cv(
           accuracy of a "predict the most common class" classifier).
           Used as the reference for the "is the model better than chance?"
           comparison.
+        - ``converged`` (bool): ``True`` if no fold raised a
+          ``ConvergenceWarning``; ``False`` if any did.
 
     Notes:
-        The classifier is ``LogisticRegression(solver="lbfgs", max_iter=1000,
+        The classifier is ``LogisticRegression(solver="lbfgs", max_iter=5000,
         C=1.0, random_state=seed)``. With ``solver="lbfgs"`` and multi-class
         data, sklearn defaults to multinomial logistic regression (the
         behavior of the deprecated ``multi_class="multinomial"`` argument).
         L2 regularisation at default strength is appropriate when the feature
         matrix has more columns than rows (e.g., V1 has 5485 features and
-        only 453 samples).
+        only 453 samples). ``max_iter`` is set to 5000 because the underdetermined
+        p >> n case can need more iterations than the sklearn default. The
+        returned dict includes ``converged`` (bool) — ``False`` if any fold
+        raised ``sklearn.exceptions.ConvergenceWarning``; useful for downstream
+        interpretation.
     """
     label_arr = np.asarray(labels)
     classes, counts = np.unique(label_arr, return_counts=True)
@@ -410,15 +418,21 @@ def classify_cv(
     skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=seed)
     clf = LogisticRegression(
         solver="lbfgs",
-        max_iter=1000,
+        max_iter=5000,
         C=1.0,
         random_state=seed,
     )
-    scores = cross_val_score(clf, X, label_arr, cv=skf, scoring="accuracy")
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always", ConvergenceWarning)
+        scores = cross_val_score(clf, X, label_arr, cv=skf, scoring="accuracy")
+    converged = not any(
+        issubclass(warning.category, ConvergenceWarning) for warning in captured
+    )
     return {
         "observed": float(scores.mean()),
         "per_fold": scores,
         "chance": chance,
+        "converged": converged,
     }
 
 
