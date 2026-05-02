@@ -206,7 +206,384 @@ def build_per_area_matrices(
 # =============================================================================
 
 
-# (analysis functions go here)
+def fit_pca(
+    X: np.ndarray,
+    *,
+    n_components: int = 10,
+    random_state: int = 42,
+) -> tuple[PCA, np.ndarray]:
+    """Fit a sklearn PCA and return both the estimator and the projection.
+
+    Args:
+        X: shape ``(n_samples, n_features)`` — the trial-averaged matrix
+            for one cortical area; rows are trials, columns are neurons.
+        n_components: number of PCs to retain. Default 10 (the analysis
+            visualises top 3 and reports variance explained on top 20 in
+            the scree plot, but having 10 retained is a sensible compromise
+            between flexibility and memory).
+        random_state: seed for the (deterministic-with-default-solver) PCA;
+            propagated to ``sklearn.decomposition.PCA``.
+
+    Returns:
+        Tuple ``(pca, X_pcs)``:
+
+        - ``pca``: fitted ``sklearn.decomposition.PCA`` instance. Use
+          ``pca.explained_variance_ratio_`` for the scree plot.
+        - ``X_pcs``: shape ``(n_samples, n_components)``, the projection.
+
+    Notes:
+        ``whiten=False``: the EDA showed neuron correlations were low
+        enough that explicit whitening would distort the variance ranking
+        we want to interpret. Default solver (``"auto"``) picks ``"full"``
+        for our matrix sizes, which is deterministic.
+    """
+    pca = PCA(n_components=n_components, whiten=False, random_state=random_state)
+    X_pcs = pca.fit_transform(X)
+    return pca, X_pcs
+
+
+def silhouette_balanced(
+    X_pcs: np.ndarray,
+    labels: np.ndarray,
+    *,
+    n_replicates: int = 20,
+    seed: int = 42,
+) -> dict:
+    """Class-balanced silhouette score, averaged over random subsamples.
+
+    Silhouette score is biased by class imbalance: a class with many trials
+    contributes many same-class neighbour distances, distorting the score.
+    To remove this, we draw ``n_replicates`` balanced subsamples — each
+    contains ``min(class_counts)`` trials per class — compute silhouette
+    on each, and average.
+
+    The function is generic over the shape of ``X_pcs``; the caller decides
+    how many PC dimensions to pass in. The intended use in this analysis is
+    top-3 PCs.
+
+    Args:
+        X_pcs: shape ``(n_samples, k)`` — coordinates in some space (PC,
+            full feature, etc.).
+        labels: shape ``(n_samples,)`` — class labels (strings or ints).
+        n_replicates: number of balanced subsamples to average over.
+        seed: master seed; per-replicate seeds derive deterministically.
+
+    Returns:
+        Dict with keys:
+
+        - ``observed`` (float): mean silhouette across replicates.
+        - ``per_replicate`` (np.ndarray of float): shape ``(n_replicates,)``,
+          the silhouette computed on each subsample.
+        - ``n_per_class`` (int): the per-class subsample size used.
+
+    Notes:
+        Uses ``sklearn.metrics.silhouette_score`` with the default
+        Euclidean metric. If a class has fewer trials than required by
+        ``n_per_class``, the function raises ``ValueError`` (caller bug,
+        e.g. a session with no Trippy trials).
+    """
+    rng = np.random.default_rng(seed)
+    label_arr = np.asarray(labels)
+    classes, counts = np.unique(label_arr, return_counts=True)
+    n_per_class = int(counts.min())
+    if n_per_class < 2:
+        raise ValueError(
+            f"Cannot compute silhouette: minority class has {n_per_class} "
+            f"trials (need at least 2)."
+        )
+
+    # Pre-compute per-class index pools.
+    class_pools = {c: np.where(label_arr == c)[0] for c in classes}
+
+    per_replicate = np.empty(n_replicates, dtype=np.float64)
+    for r in range(n_replicates):
+        # Deterministic per-replicate sub-seed.
+        sub_rng = np.random.default_rng(rng.integers(0, 2**31 - 1))
+        idx_chunks = [
+            sub_rng.choice(pool, size=n_per_class, replace=False)
+            for pool in class_pools.values()
+        ]
+        sample_idx = np.concatenate(idx_chunks)
+        per_replicate[r] = silhouette_score(
+            X_pcs[sample_idx], label_arr[sample_idx], metric="euclidean"
+        )
+
+    return {
+        "observed": float(per_replicate.mean()),
+        "per_replicate": per_replicate,
+        "n_per_class": n_per_class,
+    }
+
+
+def silhouette_balanced_null(
+    X_pcs: np.ndarray,
+    labels: np.ndarray,
+    *,
+    n_replicates: int = 20,
+    n_shuffles: int = 100,
+    seed: int = 42,
+) -> np.ndarray:
+    """Null distribution of the balanced silhouette under label permutation.
+
+    For each of ``n_shuffles`` random permutations of ``labels``, computes the
+    balanced silhouette (averaged over ``n_replicates`` subsamples, identical
+    scheme to :func:`silhouette_balanced`). Returns an array directly
+    comparable to the observed value.
+
+    Args:
+        X_pcs: shape ``(n_samples, k)``.
+        labels: shape ``(n_samples,)``.
+        n_replicates: subsamples per shuffle.
+        n_shuffles: number of label permutations.
+        seed: master seed.
+
+    Returns:
+        ``(n_shuffles,)`` array of null silhouettes.
+
+    Notes:
+        Each shuffle is a full random permutation of ``labels`` (preserves
+        class marginals on average across shuffles, exactly within each
+        shuffle). The empirical p-value compares the observed silhouette to
+        this distribution: ``p = (1 + (null >= observed).sum()) / (1 + n_shuffles)``
+        (the ``+1`` pseudocount avoids ``p = 0``).
+    """
+    rng = np.random.default_rng(seed)
+    label_arr = np.asarray(labels)
+
+    null = np.empty(n_shuffles, dtype=np.float64)
+    for s in range(n_shuffles):
+        shuffled = rng.permutation(label_arr)
+        # Use a sub-seed derived from the master RNG for the inner balance loop.
+        sub_seed = int(rng.integers(0, 2**31 - 1))
+        result = silhouette_balanced(
+            X_pcs, shuffled, n_replicates=n_replicates, seed=sub_seed
+        )
+        null[s] = result["observed"]
+    return null
+
+
+def classify_cv(
+    X: np.ndarray,
+    labels: np.ndarray,
+    *,
+    n_folds: int = 5,
+    seed: int = 42,
+) -> dict:
+    """Cross-validated multinomial logistic regression accuracy.
+
+    Trains a multinomial logistic regression on the full feature matrix
+    (no PCA), with stratified K-fold cross-validation. The full matrix is
+    used (rather than the top-K PCs) so this metric is independent of
+    PCA's variance-ranking — it answers "are stimuli linearly separable
+    in neural state space?" without conditioning on top-variance directions.
+
+    Args:
+        X: shape ``(n_samples, n_features)`` — the trial-averaged matrix
+            for one cortical area.
+        labels: shape ``(n_samples,)`` — class labels.
+        n_folds: number of stratified folds. Default 5.
+        seed: random_state for the splitter and the classifier.
+
+    Returns:
+        Dict with keys:
+
+        - ``observed`` (float): mean accuracy across folds.
+        - ``per_fold`` (np.ndarray): shape ``(n_folds,)``.
+        - ``chance`` (float): majority-class baseline accuracy (the
+          accuracy of a "predict the most common class" classifier).
+          Used as the reference for the "is the model better than chance?"
+          comparison.
+
+    Notes:
+        The classifier is ``LogisticRegression(multi_class="multinomial",
+        solver="lbfgs", max_iter=1000, C=1.0, random_state=seed)``. L2
+        regularisation at default strength is appropriate when the feature
+        matrix has more columns than rows (e.g., V1 has 5485 features and
+        only 453 samples).
+    """
+    label_arr = np.asarray(labels)
+    classes, counts = np.unique(label_arr, return_counts=True)
+    chance = float(counts.max() / counts.sum())
+
+    skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=seed)
+    clf = LogisticRegression(
+        multi_class="multinomial",
+        solver="lbfgs",
+        max_iter=1000,
+        C=1.0,
+        random_state=seed,
+    )
+    scores = cross_val_score(clf, X, label_arr, cv=skf, scoring="accuracy")
+    return {
+        "observed": float(scores.mean()),
+        "per_fold": scores,
+        "chance": chance,
+    }
+
+
+def classify_cv_null(
+    X: np.ndarray,
+    labels: np.ndarray,
+    *,
+    n_folds: int = 5,
+    n_shuffles: int = 100,
+    seed: int = 42,
+) -> np.ndarray:
+    """Null distribution of CV accuracy under label permutation.
+
+    For each of ``n_shuffles`` random permutations of ``labels``, computes
+    the cross-validated logistic regression accuracy with the same scheme
+    as :func:`classify_cv`. Returns an array directly comparable to the
+    observed value.
+
+    Args:
+        X: shape ``(n_samples, n_features)``.
+        labels: shape ``(n_samples,)``.
+        n_folds: stratified folds per shuffle.
+        n_shuffles: number of label permutations.
+        seed: master seed.
+
+    Returns:
+        ``(n_shuffles,)`` array of null accuracies.
+
+    Notes:
+        With label permutation, ``StratifiedKFold`` still stratifies by
+        the (shuffled) labels, so each shuffle is a balanced 5-fold CV
+        on randomly-assigned labels. Expected null mean ≈ chance.
+        Empirical p-value: ``p = (1 + (null >= observed).sum()) / (1 + n_shuffles)``.
+    """
+    rng = np.random.default_rng(seed)
+    label_arr = np.asarray(labels)
+
+    null = np.empty(n_shuffles, dtype=np.float64)
+    for s in range(n_shuffles):
+        shuffled = rng.permutation(label_arr)
+        sub_seed = int(rng.integers(0, 2**31 - 1))
+        result = classify_cv(X, shuffled, n_folds=n_folds, seed=sub_seed)
+        null[s] = result["observed"]
+    return null
+
+
+def match_population_size(
+    X: np.ndarray,
+    n_match: int,
+    *,
+    seed: int = 42,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Random column subsample to a target neuron count.
+
+    Used by Phase 6 of the notebook to confirm that cross-area differences
+    in stimulus separability are not driven solely by population size:
+    V1 has ~13× more neurons than AL, and PCA on a larger population has
+    more variance to distribute, which can inflate downstream metrics.
+
+    Args:
+        X: shape ``(n_samples, n_neurons)``.
+        n_match: number of columns to retain (e.g. AL's neuron count).
+        seed: random seed for the subsample.
+
+    Returns:
+        Tuple ``(X_matched, col_indices)``:
+
+        - ``X_matched``: shape ``(n_samples, n_match)``.
+        - ``col_indices``: shape ``(n_match,)``, sorted indices into the
+          original column axis (kept so the caller can record / log
+          which neurons were sampled).
+
+    Raises:
+        ValueError if ``n_match > X.shape[1]``.
+    """
+    n_neurons = X.shape[1]
+    if n_match > n_neurons:
+        raise ValueError(
+            f"Cannot match to {n_match} columns: X only has {n_neurons}."
+        )
+    rng = np.random.default_rng(seed)
+    col_indices = np.sort(rng.choice(n_neurons, size=n_match, replace=False))
+    return X[:, col_indices], col_indices
+
+
+def run_area_pipeline(
+    X: np.ndarray,
+    labels: np.ndarray,
+    area_name: str,
+    *,
+    n_components: int = 10,
+    n_balance_replicates: int = 20,
+    n_shuffles: int = 100,
+    n_folds_cv: int = 5,
+    seed: int = 42,
+) -> dict:
+    """Run the full per-area analysis pipeline in one call.
+
+    Steps:
+
+    1. Fit PCA, keep top ``n_components`` directions.
+    2. Compute balanced silhouette on top-3 PCs + null distribution.
+    3. Compute 5-fold CV multinomial logistic regression accuracy on the
+       full matrix + null distribution.
+
+    Args:
+        X: shape ``(n_samples, n_neurons)`` — the trial-averaged matrix
+            for the area.
+        labels: shape ``(n_samples,)`` — stim class per trial.
+        area_name: label used for logging / annotation only.
+        n_components: PCs to retain.
+        n_balance_replicates: passed to silhouette_balanced.
+        n_shuffles: passed to both null functions.
+        n_folds_cv: stratified CV folds.
+        seed: master seed; sub-seeds derived deterministically.
+
+    Returns:
+        Dict with keys ``"area_name"``, ``"n_neurons"``, ``"pca"``,
+        ``"X_pcs"``, ``"silhouette"`` (the ``silhouette_balanced`` dict
+        plus ``"null"`` with the shuffle distribution and ``"empirical_p"``
+        the empirical p-value), ``"classifier"`` (analogous structure for
+        CV accuracy).
+
+    Notes:
+        The empirical p-value uses the standard pseudocount-1 formula:
+        ``p = (1 + (null >= observed).sum()) / (1 + n_shuffles)``.
+    """
+    # Sub-seeds for each component, so all RNGs are deterministic from `seed`.
+    sub_seeds = np.random.default_rng(seed).integers(0, 2**31 - 1, size=5)
+
+    pca, X_pcs = fit_pca(
+        X, n_components=n_components, random_state=int(sub_seeds[0])
+    )
+
+    sil = silhouette_balanced(
+        X_pcs[:, :3], labels,
+        n_replicates=n_balance_replicates, seed=int(sub_seeds[1]),
+    )
+    sil_null = silhouette_balanced_null(
+        X_pcs[:, :3], labels,
+        n_replicates=n_balance_replicates, n_shuffles=n_shuffles,
+        seed=int(sub_seeds[2]),
+    )
+    sil_p = float((1 + (sil_null >= sil["observed"]).sum()) / (1 + n_shuffles))
+    sil["null"] = sil_null
+    sil["empirical_p"] = sil_p
+
+    clf = classify_cv(
+        X, labels, n_folds=n_folds_cv, seed=int(sub_seeds[3]),
+    )
+    clf_null = classify_cv_null(
+        X, labels, n_folds=n_folds_cv, n_shuffles=n_shuffles,
+        seed=int(sub_seeds[4]),
+    )
+    clf_p = float((1 + (clf_null >= clf["observed"]).sum()) / (1 + n_shuffles))
+    clf["null"] = clf_null
+    clf["empirical_p"] = clf_p
+
+    return {
+        "area_name": area_name,
+        "n_neurons": int(X.shape[1]),
+        "pca": pca,
+        "X_pcs": X_pcs,
+        "silhouette": sil,
+        "classifier": clf,
+    }
 
 
 # =============================================================================
