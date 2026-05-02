@@ -613,6 +613,7 @@ def plot_pca_2d(
     pca: PCA,
     *,
     ax: plt.Axes | None = None,
+    show_legend: bool = True,
 ) -> plt.Axes:
     """2-D scatter of trials in the PC1–PC2 plane, coloured by stim class.
 
@@ -626,6 +627,10 @@ def plot_pca_2d(
         area_name: used in title.
         pca: fitted PCA, used to extract variance-explained for axis labels.
         ax: matplotlib axes to draw on; created if None.
+        show_legend: if True (default), draw a per-panel legend. Set to
+            False when composing many panels at the figure level (e.g. the
+            2×2 cross-area grid in Task 6) and add a single shared legend
+            at the figure level instead.
 
     Returns:
         The axes drawn on.
@@ -660,7 +665,8 @@ def plot_pca_2d(
     ax.set_xlabel(f"PC1 ({pc1_var:.1f}% var.)")
     ax.set_ylabel(f"PC2 ({pc2_var:.1f}% var.)")
     ax.set_title(f"{area_name} — trials in PC1–PC2")
-    ax.legend(loc="best", fontsize=8, framealpha=0.9)
+    if show_legend:
+        ax.legend(loc="best", fontsize=8, framealpha=0.9)
     ax.grid(True, alpha=0.3)
     return ax
 
@@ -764,8 +770,10 @@ def plot_scree(
     # Top-3 reference annotation.
     top3 = cumulative[2] * 100 if n_show >= 3 else cumulative[-1] * 100
     ax.axvline(3, color="grey", linestyle="--", alpha=0.5)
-    ax.text(3.1, ax.get_ylim()[1] * 0.95, f"top 3 = {top3:.1f}%",
-            color="grey", fontsize=9, va="top")
+    # Use axes-fraction coordinates so the label is robust to varying
+    # scree shapes (e.g. when PC1 dominates and would overlap the bar).
+    ax.text(0.18, 0.95, f"top 3 = {top3:.1f}%",
+            transform=ax.transAxes, color="grey", fontsize=9, va="top")
 
     ax.set_xlabel("Principal component")
     ax.set_ylabel("Variance explained (%)")
