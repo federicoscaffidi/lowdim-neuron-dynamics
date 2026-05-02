@@ -1091,4 +1091,115 @@ def plot_population_matched_comparison(
 # =============================================================================
 
 
-# (aggregation functions go here)
+def aggregate_cross_session(
+    results_root: str | Path,
+    *,
+    analysis_filter: str = "all_neurons",
+) -> pd.DataFrame:
+    """Read per-session result CSVs and concatenate into a long-format frame.
+
+    Walks the directory tree under ``results_root``, looking for files
+    named ``{session}/silhouette_scores.csv``, and concatenates them
+    with a ``session`` column added.
+
+    Args:
+        results_root: directory containing per-session subdirs (e.g.
+            ``Path("results/option2")``).
+        analysis_filter: which ``analysis`` rows to keep. Default
+            ``"all_neurons"`` (the primary analysis). Other valid values
+            include ``"equal_population"`` and ``"log_sensitivity"``.
+
+    Returns:
+        Long-format dataframe with columns ``session``, ``area``,
+        ``n_neurons``, ``metric``, ``observed``, ``null_p05``,
+        ``null_median``, ``null_p95``, ``empirical_p_value``, ``analysis``.
+        Empty dataframe if no session CSVs are found.
+
+    Notes:
+        Sessions whose CSV is missing are silently skipped (the
+        cross-session aggregation cell is a no-op until ≥1 session has
+        been run).
+    """
+    results_root = Path(results_root)
+    if not results_root.exists():
+        return pd.DataFrame()
+
+    frames = []
+    for session_dir in sorted(results_root.iterdir()):
+        if not session_dir.is_dir():
+            continue
+        csv_path = session_dir / "silhouette_scores.csv"
+        if not csv_path.exists():
+            continue
+        df = pd.read_csv(csv_path)
+        df["session"] = session_dir.name
+        frames.append(df)
+
+    if not frames:
+        return pd.DataFrame()
+
+    combined = pd.concat(frames, ignore_index=True)
+    if analysis_filter is not None:
+        combined = combined[combined["analysis"] == analysis_filter].reset_index(drop=True)
+    return combined
+
+
+def plot_cross_session_metric(
+    df: pd.DataFrame,
+    metric: str,
+    *,
+    ax: plt.Axes | None = None,
+) -> plt.Axes:
+    """Grouped bar plot: sessions on x-axis, areas as colour groups.
+
+    Args:
+        df: long-format dataframe from :func:`aggregate_cross_session`.
+        metric: ``"silhouette"`` or ``"classifier"``.
+        ax: matplotlib axes; created if None.
+
+    Returns:
+        The axes drawn on. If ``df`` is empty, returns the axes with a
+        "No sessions found" annotation.
+
+    Notes:
+        Areas not present in a given session produce missing bars (skip,
+        do not zero-fill).
+    """
+    if ax is None:
+        _, ax = plt.subplots(figsize=(9, 4.5))
+
+    if df.empty:
+        ax.text(0.5, 0.5, "No per-session results found.\nRun this notebook "
+                "with SESSION set to additional values to populate.",
+                ha="center", va="center", transform=ax.transAxes,
+                fontsize=11, color="grey")
+        ax.axis("off")
+        return ax
+
+    sub = df[df["metric"] == metric].copy()
+    sessions = sorted(sub["session"].unique())
+    areas = sorted(sub["area"].unique())
+
+    x = np.arange(len(sessions))
+    bar_width = 0.8 / max(len(areas), 1)
+    palette = plt.get_cmap("tab10")
+
+    for i, area in enumerate(areas):
+        vals = []
+        for s in sessions:
+            row = sub[(sub["session"] == s) & (sub["area"] == area)]
+            vals.append(row["observed"].iloc[0] if len(row) else np.nan)
+        offsets = (i - (len(areas) - 1) / 2) * bar_width
+        ax.bar(x + offsets, vals, width=bar_width,
+               color=palette(i), edgecolor="black", linewidth=0.5,
+               label=area)
+
+    metric_label = "Balanced silhouette" if metric == "silhouette" else "CV accuracy"
+    ax.set_xticks(x)
+    ax.set_xticklabels(sessions)
+    ax.set_xlabel("Session")
+    ax.set_ylabel(metric_label)
+    ax.set_title(f"Cross-session {metric_label} by area")
+    ax.legend(loc="best", fontsize=8, title="Area")
+    ax.grid(True, alpha=0.3, axis="y")
+    return ax
