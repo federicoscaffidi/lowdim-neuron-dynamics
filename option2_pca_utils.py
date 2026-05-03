@@ -740,7 +740,12 @@ def plot_scree(
     n_show: int = 20,
     ax: plt.Axes | None = None,
 ) -> plt.Axes:
-    """Bar plot of per-PC variance ratios with cumulative-sum line.
+    """Bar plot of per-PC variance ratios (elbow / scree plot).
+
+    Shows how much variance each principal component captures individually.
+    The "elbow" is the visual point where the bars stop dropping steeply —
+    a common heuristic for choosing how many PCs to retain. For the
+    cumulative trace, see :func:`plot_cumulative_variance`.
 
     Args:
         pca: fitted PCA. Must have at least ``min(n_show, n_components)`` PCs.
@@ -757,18 +762,13 @@ def plot_scree(
 
     n_show = min(n_show, len(pca.explained_variance_ratio_))
     var_ratios = pca.explained_variance_ratio_[:n_show]
-    cumulative = np.cumsum(var_ratios)
     indices = np.arange(1, n_show + 1)
 
-    ax.bar(indices, var_ratios * 100, color="steelblue", alpha=0.8, label="per-PC")
-    ax2 = ax.twinx()
-    ax2.plot(indices, cumulative * 100, "o-", color="darkred", label="cumulative")
-    ax2.set_ylabel("Cumulative variance (%)", color="darkred")
-    ax2.tick_params(axis="y", labelcolor="darkred")
-    ax2.set_ylim(0, 100)
+    ax.bar(indices, var_ratios * 100,
+           color="steelblue", alpha=0.85, edgecolor="black", linewidth=0.5)
 
-    # Top-3 reference annotation.
-    top3 = cumulative[2] * 100 if n_show >= 3 else cumulative[-1] * 100
+    # Top-3 reference (the dimensions used by silhouette analysis).
+    top3 = var_ratios[:3].sum() * 100 if n_show >= 3 else var_ratios.sum() * 100
     ax.axvline(3, color="grey", linestyle="--", alpha=0.5)
     # Use axes-fraction coordinates so the label is robust to varying
     # scree shapes (e.g. when PC1 dominates and would overlap the bar).
@@ -777,9 +777,104 @@ def plot_scree(
 
     ax.set_xlabel("Principal component")
     ax.set_ylabel("Variance explained (%)")
-    ax.set_title(f"{area_name} — scree (top {n_show} PCs)")
+    ax.set_title(f"{area_name} — variance explained per PC (top {n_show})")
     ax.set_xticks(indices)
     ax.grid(True, alpha=0.3, axis="y")
+    return ax
+
+
+def plot_cumulative_variance(
+    pca: PCA,
+    area_name: str,
+    *,
+    n_show: int | None = None,
+    thresholds: tuple[int, ...] = (50, 80, 90, 95),
+    ax: plt.Axes | None = None,
+) -> plt.Axes:
+    """Cumulative variance explained as the number of PCs grows.
+
+    Answers the question "can we go to a lower-dimensional representation?"
+    by showing how many PCs are needed to capture standard fractions of
+    total variance (50, 80, 90, 95% by default). The threshold-to-PC
+    mapping is rendered as both an inset table (for direct reading) and
+    as marked points on the curve (for visual reference).
+
+    Args:
+        pca: fitted PCA.
+        area_name: used in title.
+        n_show: number of PCs to display. ``None`` (default) shows all
+            available PCs — needed to see the curve asymptote at 100%.
+        thresholds: variance thresholds (in %) to mark on the plot.
+        ax: matplotlib axes; created if None.
+
+    Returns:
+        The axes drawn on.
+    """
+    if ax is None:
+        _, ax = plt.subplots(figsize=(9, 5))
+
+    available = len(pca.explained_variance_ratio_)
+    if n_show is None:
+        n_show = available
+    n_show = min(n_show, available)
+    var_ratios = pca.explained_variance_ratio_[:n_show]
+    cumulative = np.cumsum(var_ratios) * 100
+    indices = np.arange(1, n_show + 1)
+
+    # Clean curve — no per-point markers (they get noisy at large n_show).
+    ax.plot(indices, cumulative, "-",
+            color="darkred", linewidth=2.2, zorder=3)
+
+    # For each threshold: faint horizontal reference line + marker at the
+    # crossing point. Annotation goes in the inset table below, not on the
+    # curve, to keep the plot readable when n_show is large.
+    threshold_to_pc: list[tuple[int, int | None]] = []
+    for thr in thresholds:
+        crosses = np.where(cumulative >= thr)[0]
+        pc_idx = (crosses[0] + 1) if len(crosses) else None
+        threshold_to_pc.append((thr, pc_idx))
+        ax.axhline(thr, color="grey", linestyle=":", alpha=0.45,
+                   linewidth=1, zorder=1)
+        if pc_idx is not None:
+            ax.plot(pc_idx, thr, "o",
+                    color="darkred", markersize=9, zorder=5,
+                    markeredgecolor="white", markeredgewidth=1.5)
+
+    ax.set_xlabel("Principal component (#)")
+    ax.set_ylabel("Cumulative variance explained (%)")
+    ax.set_title(f"{area_name} — cumulative variance ({n_show} components)")
+
+    # XTicks: anchor at 1, n_show, and the threshold-crossing PCs.
+    # Then add round multiples of 100 only if they don't crowd a threshold tick.
+    threshold_xticks = [pc for _, pc in threshold_to_pc if pc is not None]
+    anchor_ticks = sorted({1, n_show, *threshold_xticks})
+    min_gap = max(1, n_show // 25)
+    final_ticks = list(anchor_ticks)
+    if n_show >= 100:
+        for candidate in range(100, n_show, 100):
+            if min(abs(candidate - t) for t in final_ticks) >= min_gap:
+                final_ticks.append(candidate)
+    ax.set_xticks(sorted(final_ticks))
+
+    ax.set_xlim(0, n_show * 1.02)
+    ax.set_ylim(0, 105)
+    ax.grid(True, alpha=0.3)
+
+    # Inset table — directly answers "how many PCs for X% variance".
+    table_lines = ["threshold → # PCs"]
+    for thr, pc_idx in threshold_to_pc:
+        if pc_idx is None:
+            table_lines.append(f"  {thr:3d}%  → not reached")
+        else:
+            table_lines.append(f"  {thr:3d}%  → PC {pc_idx}")
+    ax.text(
+        0.02, 0.97, "\n".join(table_lines),
+        transform=ax.transAxes,
+        fontsize=9, family="monospace",
+        verticalalignment="top",
+        bbox=dict(boxstyle="round,pad=0.45",
+                  facecolor="white", edgecolor="grey", alpha=0.92),
+    )
     return ax
 
 
