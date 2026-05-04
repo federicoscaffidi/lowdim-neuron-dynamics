@@ -629,4 +629,364 @@ def subsample_clip_trials_run_pipeline(
 # =============================================================================
 
 
-# (plotters go here)
+def _frame_to_ms(frame: int | np.ndarray) -> int | np.ndarray:
+    """Convert frame index to milliseconds at the MICrONS 7.5 Hz sampling rate."""
+    return frame * 1000.0 / 7.5
+
+
+def plot_psth_per_stim_area(
+    trajectories_per_area: dict[str, dict[str, np.ndarray]],
+    area_name: str,
+    *,
+    ax: plt.Axes | None = None,
+) -> plt.Axes:
+    """Per-frame area-mean response, one curve per stim class.
+
+    Sanity check before any geometric analysis. Three curves on shared
+    axes; the rawest temporal view of stimulus differences.
+
+    Args:
+        trajectories_per_area: nested dict from
+            :func:`build_stim_trajectories`.
+        area_name: which area to plot.
+        ax: matplotlib axes; created if None.
+
+    Returns:
+        The axes drawn on.
+    """
+    if ax is None:
+        _, ax = plt.subplots(figsize=(8, 4))
+    per_stim = trajectories_per_area[area_name]
+    for stim in STIM_ORDER:
+        if stim not in per_stim:
+            continue
+        traj = per_stim[stim]  # (n_frames, n_neurons)
+        area_mean_per_frame = traj.mean(axis=1)  # (n_frames,)
+        n_frames = len(area_mean_per_frame)
+        ax.plot(
+            np.arange(n_frames), area_mean_per_frame,
+            color=STIM_COLORS[stim], linewidth=2, label=stim,
+        )
+    ax.set_xlabel("Frame")
+    ax.set_ylabel("Area-mean activity (z-scored, post-detrend)")
+    ax.set_title(f"{area_name} — per-stim PSTH (area mean across neurons)")
+    ax.legend(loc="best", fontsize=9)
+    ax.grid(True, alpha=0.3)
+    # Secondary axis with milliseconds.
+    ax2 = ax.twiny()
+    ax2.set_xlim(ax.get_xlim())
+    n_frames = next(iter(per_stim.values())).shape[0]
+    ms_ticks = np.linspace(0, n_frames - 1, 6)
+    ax2.set_xticks(ms_ticks)
+    ax2.set_xticklabels([f"{int(_frame_to_ms(t))}" for t in ms_ticks])
+    ax2.set_xlabel("ms (post stim onset)")
+    return ax
+
+
+def plot_trajectory_2d(
+    stim_pcs: dict[str, np.ndarray],
+    area_name: str,
+    pca: PCA,
+    *,
+    ax: plt.Axes | None = None,
+    annotate_every: int = 15,
+) -> plt.Axes:
+    """2-D PC1-PC2 trajectory plot, one curve per stim.
+
+    Filled circle at frame 0, open circle at the last frame. Frame
+    annotations every ``annotate_every`` frames.
+
+    Args:
+        stim_pcs: dict mapping stim → ``(n_frames, n_components)`` PC-space
+            trajectory.
+        area_name: used in title.
+        pca: fitted PCA, used for variance-explained labels.
+        ax: matplotlib axes; created if None.
+        annotate_every: gap between time-annotation labels.
+
+    Returns:
+        The axes drawn on.
+    """
+    if ax is None:
+        _, ax = plt.subplots(figsize=(7, 5.5))
+    for stim in STIM_ORDER:
+        if stim not in stim_pcs:
+            continue
+        traj = stim_pcs[stim]  # (n_frames, n_components)
+        n_frames = traj.shape[0]
+        ax.plot(
+            traj[:, 0], traj[:, 1],
+            color=STIM_COLORS[stim], linewidth=2, alpha=0.85, label=stim,
+        )
+        # Frame 0 marker (filled).
+        ax.scatter(traj[0, 0], traj[0, 1],
+                   color=STIM_COLORS[stim], s=80, zorder=4,
+                   edgecolor="black", linewidth=1)
+        # Last frame (open circle).
+        ax.scatter(traj[-1, 0], traj[-1, 1],
+                   facecolor="white", edgecolor=STIM_COLORS[stim],
+                   s=80, zorder=4, linewidth=2)
+        # Light annotations every annotate_every frames.
+        for f in range(annotate_every, n_frames - 1, annotate_every):
+            ax.text(traj[f, 0], traj[f, 1], f"{f}",
+                    color=STIM_COLORS[stim], fontsize=7,
+                    ha="center", va="center",
+                    bbox=dict(boxstyle="circle,pad=0.15",
+                              facecolor="white",
+                              edgecolor=STIM_COLORS[stim],
+                              linewidth=0.6, alpha=0.85))
+
+    pc1_var = 100 * pca.explained_variance_ratio_[0]
+    pc2_var = 100 * pca.explained_variance_ratio_[1]
+    ax.set_xlabel(f"PC1 ({pc1_var:.1f}% var.)  — likely temporal")
+    ax.set_ylabel(f"PC2 ({pc2_var:.1f}% var.)")
+    ax.set_title(
+        f"{area_name} — trajectories (filled = frame 0, open = last frame)"
+    )
+    ax.legend(loc="best", fontsize=9)
+    ax.grid(True, alpha=0.3)
+    return ax
+
+
+def plot_trajectory_3d_plotly(
+    stim_pcs: dict[str, np.ndarray],
+    area_name: str,
+    pca: PCA,
+):
+    """Interactive 3-D trajectory plot in PC1-PC2-PC3 space.
+
+    Returns a Plotly Figure. Caller saves with ``fig.write_html(path)``.
+    """
+    import plotly.graph_objects as go
+    fig = go.Figure()
+    for stim in STIM_ORDER:
+        if stim not in stim_pcs:
+            continue
+        traj = stim_pcs[stim]
+        n_frames = traj.shape[0]
+        fig.add_trace(go.Scatter3d(
+            x=traj[:, 0], y=traj[:, 1], z=traj[:, 2],
+            mode="lines+markers",
+            line=dict(color=STIM_COLORS[stim], width=4),
+            marker=dict(size=3, color=STIM_COLORS[stim]),
+            name=stim,
+            text=[f"frame {f} ({int(_frame_to_ms(f))} ms)"
+                  for f in range(n_frames)],
+        ))
+        # Frame 0 emphasised (filled).
+        fig.add_trace(go.Scatter3d(
+            x=[traj[0, 0]], y=[traj[0, 1]], z=[traj[0, 2]],
+            mode="markers",
+            marker=dict(size=8, color=STIM_COLORS[stim],
+                        line=dict(color="black", width=1)),
+            name=f"{stim} t=0", showlegend=False,
+        ))
+    pc_var = 100 * pca.explained_variance_ratio_[:3]
+    fig.update_layout(
+        title=f"{area_name} — trajectories in PC1-PC2-PC3",
+        scene=dict(
+            xaxis_title=f"PC1 ({pc_var[0]:.1f}% var.) [likely temporal]",
+            yaxis_title=f"PC2 ({pc_var[1]:.1f}% var.)",
+            zaxis_title=f"PC3 ({pc_var[2]:.1f}% var.)",
+        ),
+        width=850, height=700,
+        margin=dict(l=0, r=0, t=40, b=0),
+    )
+    return fig
+
+
+def plot_pairwise_distance_time_course(
+    distances: dict[frozenset[str], np.ndarray],
+    envelopes: dict[frozenset[str], dict[str, np.ndarray]] | None,
+    area_name: str,
+    metric_label: str,
+    *,
+    null_p95: dict[frozenset[str], float] | None = None,
+    ax: plt.Axes | None = None,
+) -> plt.Axes:
+    """Three pairwise-distance time courses on shared axes, with envelopes.
+
+    Args:
+        distances: pair-keyed dict of ``(n_frames,)`` observed distances.
+        envelopes: optional pair-keyed dict with ``"lower"``/``"upper"``
+            shape ``(n_frames,)``. If supplied, drawn as a shaded fill.
+        area_name: used in title.
+        metric_label: used in y-axis label (e.g. "Euclidean (full features)").
+        null_p95: optional pair-keyed scalar — the 95th percentile of the
+            shuffle null. Drawn as a horizontal dashed line per pair.
+        ax: matplotlib axes; created if None.
+
+    Returns:
+        The axes drawn on.
+    """
+    if ax is None:
+        _, ax = plt.subplots(figsize=(9, 5))
+
+    pair_to_label = {
+        frozenset({"Clip", "Monet2"}): "Clip↔Monet2",
+        frozenset({"Clip", "Trippy"}): "Clip↔Trippy",
+        frozenset({"Monet2", "Trippy"}): "Monet2↔Trippy",
+    }
+    pair_to_color = {
+        frozenset({"Clip", "Monet2"}): "#0072B2",
+        frozenset({"Clip", "Trippy"}): "#E69F00",
+        frozenset({"Monet2", "Trippy"}): "#009E73",
+    }
+    for pair, dist in distances.items():
+        n_frames = len(dist)
+        x = np.arange(n_frames)
+        color = pair_to_color.get(pair, "grey")
+        label = pair_to_label.get(pair, "/".join(sorted(pair)))
+        ax.plot(x, dist, color=color, linewidth=2, label=label)
+        if envelopes and pair in envelopes:
+            ax.fill_between(
+                x, envelopes[pair]["lower"], envelopes[pair]["upper"],
+                color=color, alpha=0.2,
+            )
+        if null_p95 and pair in null_p95:
+            ax.axhline(null_p95[pair], color=color, linestyle="--",
+                       alpha=0.6, linewidth=1)
+    ax.set_xlabel("Frame")
+    ax.set_ylabel(metric_label)
+    ax.set_title(f"{area_name} — pairwise trajectory distance ({metric_label})")
+    ax.legend(loc="best", fontsize=9)
+    ax.grid(True, alpha=0.3)
+    # Secondary ms axis.
+    n_frames = len(next(iter(distances.values())))
+    ax2 = ax.twiny()
+    ax2.set_xlim(ax.get_xlim())
+    ms_ticks = np.linspace(0, n_frames - 1, 6)
+    ax2.set_xticks(ms_ticks)
+    ax2.set_xticklabels([f"{int(_frame_to_ms(t))}" for t in ms_ticks])
+    ax2.set_xlabel("ms (post stim onset)")
+    return ax
+
+
+def plot_cross_area_monet2_trippy(
+    per_area_distances: dict[str, np.ndarray],
+    per_area_envelopes: dict[str, dict[str, np.ndarray]] | None,
+    metric_label: str,
+    *,
+    ax: plt.Axes | None = None,
+) -> plt.Axes:
+    """Headline figure: Monet2↔Trippy distance time course, all four areas.
+
+    Args:
+        per_area_distances: area → ``(n_frames,)`` Monet2↔Trippy distance.
+        per_area_envelopes: area → dict with ``"lower"``/``"upper"``.
+        metric_label: used in y-axis label.
+        ax: matplotlib axes; created if None.
+    """
+    if ax is None:
+        _, ax = plt.subplots(figsize=(9, 5))
+    palette = {"V1": "#0072B2", "AL": "#E69F00", "LM": "#009E73", "RL": "#CC79A7"}
+    for area, dist in per_area_distances.items():
+        x = np.arange(len(dist))
+        color = palette.get(area, "grey")
+        ax.plot(x, dist, color=color, linewidth=2.2, label=area)
+        if per_area_envelopes and area in per_area_envelopes:
+            ax.fill_between(
+                x, per_area_envelopes[area]["lower"],
+                per_area_envelopes[area]["upper"],
+                color=color, alpha=0.2,
+            )
+    ax.set_xlabel("Frame")
+    ax.set_ylabel(metric_label)
+    ax.set_title(f"Monet2↔Trippy distance across cortical areas ({metric_label})")
+    ax.legend(loc="best", fontsize=9)
+    ax.grid(True, alpha=0.3)
+    n_frames = len(next(iter(per_area_distances.values())))
+    ax2 = ax.twiny()
+    ax2.set_xlim(ax.get_xlim())
+    ms_ticks = np.linspace(0, n_frames - 1, 6)
+    ax2.set_xticks(ms_ticks)
+    ax2.set_xticklabels([f"{int(_frame_to_ms(t))}" for t in ms_ticks])
+    ax2.set_xlabel("ms (post stim onset)")
+    return ax
+
+
+def plot_population_matched_distance_comparison(
+    full_distance: np.ndarray,
+    matched_distances: list[np.ndarray],
+    area_name: str,
+    pair_label: str,
+    metric_label: str,
+    *,
+    ax: plt.Axes | None = None,
+) -> plt.Axes:
+    """Full-population vs equal-population distance time courses for one area / pair.
+
+    Args:
+        full_distance: ``(n_frames,)`` distance from the all-neurons analysis.
+        matched_distances: list of ``(n_frames,)`` distances, one per
+            subsample (typically 20).
+        area_name, pair_label, metric_label: used in title and labels.
+        ax: matplotlib axes; created if None.
+    """
+    if ax is None:
+        _, ax = plt.subplots(figsize=(8, 4.5))
+    n_frames = len(full_distance)
+    x = np.arange(n_frames)
+    matched_arr = np.array(matched_distances)
+    median = np.median(matched_arr, axis=0)
+    q25 = np.quantile(matched_arr, 0.25, axis=0)
+    q75 = np.quantile(matched_arr, 0.75, axis=0)
+    ax.plot(x, full_distance, "-", color="steelblue", linewidth=2.2,
+            label="all neurons")
+    ax.plot(x, median, "-", color="lightcoral", linewidth=2,
+            label="matched to AL (median)")
+    ax.fill_between(x, q25, q75, color="lightcoral", alpha=0.25,
+                    label="matched IQR (Q1-Q3)")
+    ax.set_xlabel("Frame")
+    ax.set_ylabel(metric_label)
+    ax.set_title(f"{area_name} — {pair_label} (full vs. equal-population)")
+    ax.legend(loc="best", fontsize=9)
+    ax.grid(True, alpha=0.3)
+    return ax
+
+
+def plot_clip_subsampling_comparison(
+    full_distances: dict[frozenset[str], np.ndarray],
+    subsampled_distances_list: list[dict[frozenset[str], np.ndarray]],
+    metric_label: str,
+    *,
+    ax: plt.Axes | None = None,
+) -> plt.Axes:
+    """V1-only: full-Clip vs subsampled-Clip distance time courses.
+
+    Two pairs shown on the same axes: Clip↔Monet2 and Clip↔Trippy
+    (Monet2↔Trippy is unaffected by Clip-trial count and is omitted).
+
+    Args:
+        full_distances: pair → ``(n_frames,)`` from all-Clip analysis.
+        subsampled_distances_list: list of pair → ``(n_frames,)`` dicts,
+            one per Clip subsample.
+        metric_label: used in y-axis label.
+        ax: matplotlib axes; created if None.
+    """
+    if ax is None:
+        _, ax = plt.subplots(figsize=(9, 5))
+    pairs_of_interest = [
+        (frozenset({"Clip", "Monet2"}), "Clip↔Monet2", "#0072B2"),
+        (frozenset({"Clip", "Trippy"}), "Clip↔Trippy", "#E69F00"),
+    ]
+    n_frames = len(next(iter(full_distances.values())))
+    x = np.arange(n_frames)
+    for pair, label, color in pairs_of_interest:
+        if pair not in full_distances:
+            continue
+        ax.plot(x, full_distances[pair], "-", color=color, linewidth=2.2,
+                label=f"{label} (all 377 Clip)")
+        sub_arr = np.array([sd[pair] for sd in subsampled_distances_list])
+        median = np.median(sub_arr, axis=0)
+        q25 = np.quantile(sub_arr, 0.25, axis=0)
+        q75 = np.quantile(sub_arr, 0.75, axis=0)
+        ax.plot(x, median, "--", color=color, linewidth=2,
+                label=f"{label} (Clip subsampled to 38)")
+        ax.fill_between(x, q25, q75, color=color, alpha=0.18)
+    ax.set_xlabel("Frame")
+    ax.set_ylabel(metric_label)
+    ax.set_title("V1 — Clip-trial subsampling sanity check")
+    ax.legend(loc="best", fontsize=8)
+    ax.grid(True, alpha=0.3)
+    return ax
