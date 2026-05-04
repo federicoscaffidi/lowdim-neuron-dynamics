@@ -382,14 +382,27 @@ def bootstrap_distance_envelope(
     )
     pair_keys = list(initial_pairs.keys())
 
+    # Performance optimisation: pre-compute per-stim sub-tensors once (one
+    # ~1 GB allocation per stim for V1) and compute per-bootstrap means via
+    # bincount + einsum, avoiding the ~1.5 GB tensor copy that the naïve
+    # ``_resample_per_class`` produces at every iteration.
+    stim_subtensors: dict[str, np.ndarray] = {}
+    for stim in np.unique(label_arr):
+        mask = label_arr == stim
+        if mask.any():
+            stim_subtensors[stim] = trial_tensor[mask]
+
     accum = {pk: np.empty((n_boot, n_frames)) for pk in pair_keys}
     for b in range(n_boot):
         sub_seed = int(rng.integers(0, 2**31 - 1))
         sub_rng = np.random.default_rng(sub_seed)
-        resampled_tensor, resampled_labels = _resample_per_class(
-            trial_tensor, label_arr, rng=sub_rng
-        )
-        traj = _trajectories_from_trial_tensor(resampled_tensor, resampled_labels)
+        traj: dict[str, np.ndarray] = {}
+        for stim, subtensor in stim_subtensors.items():
+            n = subtensor.shape[0]
+            idx = sub_rng.integers(0, n, size=n)  # sample with replacement
+            counts = np.bincount(idx, minlength=n).astype(np.float64)
+            # Weighted mean = sum_i counts[i] * subtensor[i] / n
+            traj[stim] = np.einsum("i,ijk->jk", counts, subtensor) / n
         pairs = pairwise_trajectory_distance(
             traj, metric=metric, pca=pca, n_pcs=n_pcs
         )
