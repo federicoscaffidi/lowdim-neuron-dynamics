@@ -315,61 +315,6 @@ def build_clip_inventory(
 # =============================================================================
 
 
-def plot_balance_table(
-    inventory_df: pd.DataFrame,
-    category_post_qc_counts: dict[str, int],
-    *,
-    ax: plt.Axes | None = None,
-) -> plt.Axes:
-    """Render the per-category trials × unique-movies balance table.
-
-    Args:
-        inventory_df: Output of :func:`build_clip_inventory`. Used to count
-            unique movies per category.
-        category_post_qc_counts: Mapping ``{category: n_trials_post_qc}``
-            (e.g. ``{"Cinematic": 127, "sports1m": 127, "Rendered": 123}``)
-            computed by the notebook from the post-QC label array.
-        ax: matplotlib axes; created if None.
-
-    Returns:
-        The axes drawn on. Renders a matplotlib ``table`` showing one
-        row per category plus a totals row.
-    """
-    if ax is None:
-        _, ax = plt.subplots(figsize=(7, 2.6))
-    ax.axis("off")
-
-    n_unique = inventory_df.groupby("category", observed=True).size().to_dict()
-    rows = []
-    total_t = 0
-    total_u = 0
-    for cat in CATEGORY_ORDER:
-        nt = int(category_post_qc_counts.get(cat, 0))
-        nu = int(n_unique.get(cat, 0))
-        rows.append([cat, nt, nu])
-        total_t += nt
-        total_u += nu
-    rows.append(["total", total_t, total_u])
-
-    table = ax.table(
-        cellText=[[str(v) for v in r] for r in rows],
-        colLabels=["category", "trials post-QC", "unique movies"],
-        cellLoc="center",
-        loc="center",
-    )
-    table.auto_set_font_size(False)
-    table.set_fontsize(11)
-    table.scale(1.0, 1.6)
-
-    # Color category rows.
-    for i, cat in enumerate(CATEGORY_ORDER):
-        for j in range(3):
-            table[(i + 1, j)].set_facecolor(CATEGORY_COLORS[cat])
-            table[(i + 1, j)].set_alpha(0.25)
-    ax.set_title("Session 7_5 — Clip class balance", fontsize=12, pad=12)
-    return ax
-
-
 def plot_trial_count_histogram(
     inventory_df: pd.DataFrame,
     *,
