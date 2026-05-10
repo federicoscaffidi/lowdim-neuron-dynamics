@@ -32,19 +32,19 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 
 CATEGORY_COLORS: dict[str, str] = {
-    "Cinematic": "#D81B60",  # magenta — feature films
-    "sports1m":  "#1E88E5",  # blue    — amateur sports
-    "Rendered":  "#FFC107",  # amber   — synthetic 3-D
+    "Cinematic": "#F87171",  # coral red — feature films
+    "sports1m":  "#22D3EE",  # cyan      — amateur sports
+    "Rendered":  "#A855F7",  # violet    — synthetic 3-D
 }
 CATEGORY_MARKERS: dict[str, str] = {"Cinematic": "o", "sports1m": "s", "Rendered": "^"}
 CATEGORY_ORDER: list[str] = ["Cinematic", "sports1m", "Rendered"]
 
-# Pair palette derived from category palette using a colourblind-safe
-# mixing rule (mid-tone of the two category colours, deterministic).
+# Pair palette derived from category palette: mid-tone of the two category
+# colours, picked manually to read cleanly on a white background.
 _PAIR_COLORS: dict[frozenset[str], str] = {
-    frozenset({"Cinematic", "sports1m"}): "#7E5587",  # purple
-    frozenset({"Cinematic", "Rendered"}): "#EC8E2E",  # warm orange
-    frozenset({"sports1m",  "Rendered"}): "#7DA427",  # olive green
+    frozenset({"Cinematic", "sports1m"}): "#7B7CB8",  # dusty indigo (red+cyan)
+    frozenset({"Cinematic", "Rendered"}): "#C75CB1",  # magenta      (red+violet)
+    frozenset({"sports1m",  "Rendered"}): "#6CB7CC",  # teal-blue    (cyan+violet)
 }
 _PAIR_LABELS: dict[frozenset[str], str] = {
     frozenset({"Cinematic", "sports1m"}): "Cinematic↔sports1m",

@@ -35,11 +35,12 @@ from sklearn.model_selection import StratifiedKFold, cross_val_score
 
 
 # Shared visual conventions for stim-class colouring across all plotters.
-# Okabe–Ito-inspired, colour-blind safe.
+# Saturated jewel tones from neuro_palette.STIMULUS — designed for the
+# presentation deck (works on both white and dark backgrounds).
 STIM_COLORS = {
-    "Clip": "#0072B2",      # blue
-    "Monet2": "#E69F00",    # orange
-    "Trippy": "#009E73",    # green
+    "Clip":   "#60A5FA",    # sky blue
+    "Monet2": "#F472B6",    # rose
+    "Trippy": "#34D399",    # emerald
 }
 STIM_MARKERS = {
     "Clip": "o",       # circle
