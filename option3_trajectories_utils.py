@@ -652,6 +652,8 @@ def plot_psth_per_stim_area(
     area_name: str,
     *,
     ax: plt.Axes | None = None,
+    palette: dict[str, str] | None = None,
+    stim_order: list[str] | None = None,
 ) -> plt.Axes:
     """Per-frame area-mean response, one curve per stim class.
 
@@ -663,6 +665,13 @@ def plot_psth_per_stim_area(
             :func:`build_stim_trajectories`.
         area_name: which area to plot.
         ax: matplotlib axes; created if None.
+        palette: Optional dict ``{stim: hex_color}`` overriding
+            ``STIM_COLORS``. Used when the same plotter is reused with
+            different stim labels (e.g. Option 4's category palette).
+            ``None`` keeps Option 3 behaviour.
+        stim_order: Optional list of stim keys controlling iteration
+            order, overriding ``STIM_ORDER``. ``None`` keeps Option 3
+            behaviour.
 
     Returns:
         The axes drawn on.
@@ -670,7 +679,9 @@ def plot_psth_per_stim_area(
     if ax is None:
         _, ax = plt.subplots(figsize=(8, 4))
     per_stim = trajectories_per_area[area_name]
-    for stim in STIM_ORDER:
+    _palette = palette if palette is not None else STIM_COLORS
+    _order = stim_order if stim_order is not None else STIM_ORDER
+    for stim in _order:
         if stim not in per_stim:
             continue
         traj = per_stim[stim]  # (n_frames, n_neurons)
@@ -678,7 +689,7 @@ def plot_psth_per_stim_area(
         n_frames = len(area_mean_per_frame)
         ax.plot(
             np.arange(n_frames), area_mean_per_frame,
-            color=STIM_COLORS[stim], linewidth=2, label=stim,
+            color=_palette[stim], linewidth=2, label=stim,
         )
     ax.set_xlabel("Frame")
     ax.set_ylabel("Area-mean activity (z-scored, post-detrend)")
@@ -703,6 +714,8 @@ def plot_trajectory_2d(
     *,
     ax: plt.Axes | None = None,
     annotate_every: int = 15,
+    palette: dict[str, str] | None = None,
+    stim_order: list[str] | None = None,
 ) -> plt.Axes:
     """2-D PC1-PC2 trajectory plot, one curve per stim.
 
@@ -716,37 +729,46 @@ def plot_trajectory_2d(
         pca: fitted PCA, used for variance-explained labels.
         ax: matplotlib axes; created if None.
         annotate_every: gap between time-annotation labels.
+        palette: Optional dict ``{stim: hex_color}`` overriding
+            ``STIM_COLORS``. Used when the same plotter is reused with
+            different stim labels (e.g. Option 4's category palette).
+            ``None`` keeps Option 3 behaviour.
+        stim_order: Optional list of stim keys controlling iteration
+            order, overriding ``STIM_ORDER``. ``None`` keeps Option 3
+            behaviour.
 
     Returns:
         The axes drawn on.
     """
     if ax is None:
         _, ax = plt.subplots(figsize=(7, 5.5))
-    for stim in STIM_ORDER:
+    _palette = palette if palette is not None else STIM_COLORS
+    _order = stim_order if stim_order is not None else STIM_ORDER
+    for stim in _order:
         if stim not in stim_pcs:
             continue
         traj = stim_pcs[stim]  # (n_frames, n_components)
         n_frames = traj.shape[0]
         ax.plot(
             traj[:, 0], traj[:, 1],
-            color=STIM_COLORS[stim], linewidth=2, alpha=0.85, label=stim,
+            color=_palette[stim], linewidth=2, alpha=0.85, label=stim,
         )
         # Frame 0 marker (filled).
         ax.scatter(traj[0, 0], traj[0, 1],
-                   color=STIM_COLORS[stim], s=80, zorder=4,
+                   color=_palette[stim], s=80, zorder=4,
                    edgecolor="black", linewidth=1)
         # Last frame (open circle).
         ax.scatter(traj[-1, 0], traj[-1, 1],
-                   facecolor="white", edgecolor=STIM_COLORS[stim],
+                   facecolor="white", edgecolor=_palette[stim],
                    s=80, zorder=4, linewidth=2)
         # Light annotations every annotate_every frames.
         for f in range(annotate_every, n_frames - 1, annotate_every):
             ax.text(traj[f, 0], traj[f, 1], f"{f}",
-                    color=STIM_COLORS[stim], fontsize=7,
+                    color=_palette[stim], fontsize=7,
                     ha="center", va="center",
                     bbox=dict(boxstyle="circle,pad=0.15",
                               facecolor="white",
-                              edgecolor=STIM_COLORS[stim],
+                              edgecolor=_palette[stim],
                               linewidth=0.6, alpha=0.85))
 
     pc1_var = 100 * pca.explained_variance_ratio_[0]
@@ -765,14 +787,28 @@ def plot_trajectory_3d_plotly(
     stim_pcs: dict[str, np.ndarray],
     area_name: str,
     pca: PCA,
+    *,
+    palette: dict[str, str] | None = None,
+    stim_order: list[str] | None = None,
 ):
     """Interactive 3-D trajectory plot in PC1-PC2-PC3 space.
 
     Returns a Plotly Figure. Caller saves with ``fig.write_html(path)``.
+
+    Args:
+        palette: Optional dict ``{stim: hex_color}`` overriding
+            ``STIM_COLORS``. Used when the same plotter is reused with
+            different stim labels (e.g. Option 4's category palette).
+            ``None`` keeps Option 3 behaviour.
+        stim_order: Optional list of stim keys controlling iteration
+            order, overriding ``STIM_ORDER``. ``None`` keeps Option 3
+            behaviour.
     """
     import plotly.graph_objects as go
     fig = go.Figure()
-    for stim in STIM_ORDER:
+    _palette = palette if palette is not None else STIM_COLORS
+    _order = stim_order if stim_order is not None else STIM_ORDER
+    for stim in _order:
         if stim not in stim_pcs:
             continue
         traj = stim_pcs[stim]
@@ -780,8 +816,8 @@ def plot_trajectory_3d_plotly(
         fig.add_trace(go.Scatter3d(
             x=traj[:, 0], y=traj[:, 1], z=traj[:, 2],
             mode="lines+markers",
-            line=dict(color=STIM_COLORS[stim], width=4),
-            marker=dict(size=3, color=STIM_COLORS[stim]),
+            line=dict(color=_palette[stim], width=4),
+            marker=dict(size=3, color=_palette[stim]),
             name=stim,
             text=[f"frame {f} ({int(_frame_to_ms(f))} ms)"
                   for f in range(n_frames)],
@@ -790,7 +826,7 @@ def plot_trajectory_3d_plotly(
         fig.add_trace(go.Scatter3d(
             x=[traj[0, 0]], y=[traj[0, 1]], z=[traj[0, 2]],
             mode="markers",
-            marker=dict(size=8, color=STIM_COLORS[stim],
+            marker=dict(size=8, color=_palette[stim],
                         line=dict(color="black", width=1)),
             name=f"{stim} t=0", showlegend=False,
         ))
@@ -816,6 +852,8 @@ def plot_pairwise_distance_time_course(
     *,
     null_p95: dict[frozenset[str], float] | None = None,
     ax: plt.Axes | None = None,
+    pair_palette: dict[frozenset[str], str] | None = None,
+    pair_labels: dict[frozenset[str], str] | None = None,
 ) -> plt.Axes:
     """Three pairwise-distance time courses on shared axes, with envelopes.
 
@@ -828,6 +866,14 @@ def plot_pairwise_distance_time_course(
         null_p95: optional pair-keyed scalar — the 95th percentile of the
             shuffle null. Drawn as a horizontal dashed line per pair.
         ax: matplotlib axes; created if None.
+        pair_palette: Optional dict
+            ``{frozenset({a, b}): hex_color}`` overriding the hardcoded
+            Clip/Monet2/Trippy pair colors. ``None`` keeps Option 3
+            behaviour.
+        pair_labels: Optional dict
+            ``{frozenset({a, b}): label_str}`` overriding the hardcoded
+            Clip↔Monet2 / Clip↔Trippy / Monet2↔Trippy labels. ``None``
+            keeps Option 3 behaviour.
 
     Returns:
         The axes drawn on.
@@ -835,12 +881,12 @@ def plot_pairwise_distance_time_course(
     if ax is None:
         _, ax = plt.subplots(figsize=(9, 5))
 
-    pair_to_label = {
+    pair_to_label = pair_labels if pair_labels is not None else {
         frozenset({"Clip", "Monet2"}): "Clip↔Monet2",
         frozenset({"Clip", "Trippy"}): "Clip↔Trippy",
         frozenset({"Monet2", "Trippy"}): "Monet2↔Trippy",
     }
-    pair_to_color = {
+    pair_to_color = pair_palette if pair_palette is not None else {
         frozenset({"Clip", "Monet2"}): "#0072B2",
         frozenset({"Clip", "Trippy"}): "#E69F00",
         frozenset({"Monet2", "Trippy"}): "#009E73",
