@@ -1,15 +1,15 @@
-"""option3_trajectories_utils — helper module for the time-resolved PCA trajectories notebook.
+"""option3_trajectories_utils: helper module for the time-resolved PCA trajectories notebook.
 
 The module is organized in four sections:
 
-(a) Trajectory construction — build_stim_trajectories, save_trajectories,
+(a) Trajectory construction: build_stim_trajectories, save_trajectories,
     load_trajectories.
-(b) PCA fit and projection — fit_trajectory_pca.
-(c) Distance metrics, bootstrap, null, and subsample pipelines —
+(b) PCA fit and projection: fit_trajectory_pca.
+(c) Distance metrics, bootstrap, null, and subsample pipelines:
     pairwise_trajectory_distance, bootstrap_distance_envelope,
     shuffle_null_max_distance, compute_onset_latency,
     subsample_population_run_pipeline, subsample_clip_trials_run_pipeline.
-(d) Plotting — PSTH per area, 2-D / 3-D trajectory plots, distance time-course
+(d) Plotting: PSTH per area, 2-D / 3-D trajectory plots, distance time-course
     panels, cross-area headline, equal-population comparison, Clip-subsampling
     comparison.
 
@@ -19,7 +19,7 @@ Design constraints (see docs/specs/2026-05-04-option3-trajectories-design.md):
 - Plotting functions accept ``ax`` (or return a Figure for Plotly) so plots
   compose.
 - Every public function has a NumPy-style docstring with Args, Returns, Notes.
-- No magic constants — anything tunable is a parameter with a sensible default.
+- No magic constants: anything tunable is a parameter with a sensible default.
 - All randomness is seeded via the ``seed`` (or ``random_state``) parameter;
   sub-seeds are derived deterministically from the master seed.
 - Reuses option2_pca_utils.preprocess_responses (Stage A) and
@@ -86,7 +86,7 @@ def build_stim_trajectories(
 
     Notes:
         Imbalanced trial counts (e.g. 7_5: 377 Clip / 38 Monet2 / 38 Trippy)
-        produce trajectories with very different smoothness — the Clip
+        produce trajectories with very different smoothness: the Clip
         trajectory is a much tighter mean estimate than the synthetics.
         The Phase 9 Clip-subsampling control addresses this directly.
     """
@@ -309,7 +309,7 @@ def _resample_per_class(
     """Class-stratified bootstrap (sample with replacement within each class).
 
     Returns ``(resampled_responses, resampled_labels)`` with same shape as inputs.
-    Each class is resampled to its own original size — preserving class
+    Each class is resampled to its own original size, preserving class
     marginals exactly across the bootstrap.
     """
     classes, counts = np.unique(labels, return_counts=True)
@@ -351,11 +351,11 @@ def bootstrap_distance_envelope(
     For each of ``n_boot`` iterations, class-stratified resamples the trials,
     rebuilds per-stim trajectories from the resampled tensor, and recomputes
     pairwise distances. Returns the 2.5/97.5 percentile envelopes per pair
-    per frame. **PCA is NOT refit** — fixed at the supplied basis to keep
+    per frame. **PCA is NOT refit**; it is fixed at the supplied basis to keep
     variability attributable to the trajectories, not the basis.
 
     Args:
-        trial_tensor: ``(n_trials, n_frames, n_neurons_in_area)`` — the per-area
+        trial_tensor: ``(n_trials, n_frames, n_neurons_in_area)``, the per-area
             trial × time × neuron tensor (build once and pass in).
         labels: ``(n_trials,)`` stim labels.
         metric: ``"full"`` or ``"top_pcs"``; same convention as
@@ -530,7 +530,7 @@ def subsample_population_run_pipeline(
         - ``"trajectories"``: ``{stim: (n_frames, n_match)}``.
         - ``"distances_full"``: pair → ``(n_frames,)`` distances.
         - ``"distances_top3_pc"``: pair → ``(n_frames,)`` distances.
-        - ``"col_indices"``: shape ``(n_match,)`` — which neurons were sampled.
+        - ``"col_indices"``: shape ``(n_match,)``, which neurons were sampled.
 
     Notes:
         Bootstrap envelopes and shuffle nulls are NOT recomputed per subsample
@@ -588,7 +588,7 @@ def subsample_clip_trials_run_pipeline(
 
     Args:
         trial_tensor: ``(n_trials, n_frames, n_neurons)``.
-        labels: ``(n_trials,)`` — must include at least one ``"Clip"`` trial.
+        labels: ``(n_trials,)``, must include at least one ``"Clip"`` trial.
         n_clip_target: target number of Clip trials (typically 38, matching
             the minority counts in session 7_5).
         n_subsamples: random subsamples to average over.
@@ -693,7 +693,7 @@ def plot_psth_per_stim_area(
         )
     ax.set_xlabel("Frame")
     ax.set_ylabel("Area-mean activity (z-scored, post-detrend)")
-    ax.set_title(f"{area_name} — per-stim PSTH (area mean across neurons)")
+    ax.set_title(f"{area_name}: per-stim PSTH (area mean across neurons)")
     ax.legend(loc="best", fontsize=9)
     ax.grid(True, alpha=0.3)
     # Secondary axis with milliseconds.
@@ -773,10 +773,10 @@ def plot_trajectory_2d(
 
     pc1_var = 100 * pca.explained_variance_ratio_[0]
     pc2_var = 100 * pca.explained_variance_ratio_[1]
-    ax.set_xlabel(f"PC1 ({pc1_var:.1f}% var.)  — likely temporal")
+    ax.set_xlabel(f"PC1 ({pc1_var:.1f}% var.; likely temporal)")
     ax.set_ylabel(f"PC2 ({pc2_var:.1f}% var.)")
     ax.set_title(
-        f"{area_name} — trajectories (filled = frame 0, open = last frame)"
+        f"{area_name}: trajectories (filled = frame 0, open = last frame)"
     )
     ax.legend(loc="best", fontsize=9)
     ax.grid(True, alpha=0.3)
@@ -832,7 +832,7 @@ def plot_trajectory_3d_plotly(
         ))
     pc_var = 100 * pca.explained_variance_ratio_[:3]
     fig.update_layout(
-        title=f"{area_name} — trajectories in PC1-PC2-PC3",
+        title=f"{area_name}: trajectories in PC1-PC2-PC3",
         scene=dict(
             xaxis_title=f"PC1 ({pc_var[0]:.1f}% var.) [likely temporal]",
             yaxis_title=f"PC2 ({pc_var[1]:.1f}% var.)",
@@ -863,7 +863,7 @@ def plot_pairwise_distance_time_course(
             shape ``(n_frames,)``. If supplied, drawn as a shaded fill.
         area_name: used in title.
         metric_label: used in y-axis label (e.g. "Euclidean (full features)").
-        null_p95: optional pair-keyed scalar — the 95th percentile of the
+        null_p95: optional pair-keyed scalar, the 95th percentile of the
             shuffle null. Drawn as a horizontal dashed line per pair.
         ax: matplotlib axes; created if None.
         pair_palette: Optional dict
@@ -907,7 +907,7 @@ def plot_pairwise_distance_time_course(
                        alpha=0.6, linewidth=1)
     ax.set_xlabel("Frame")
     ax.set_ylabel(metric_label)
-    ax.set_title(f"{area_name} — pairwise trajectory distance ({metric_label})")
+    ax.set_title(f"{area_name}: pairwise trajectory distance ({metric_label})")
     ax.legend(loc="best", fontsize=9)
     ax.grid(True, alpha=0.3)
     # Secondary ms axis.
@@ -998,7 +998,7 @@ def plot_population_matched_distance_comparison(
                     label="matched IQR (Q1-Q3)")
     ax.set_xlabel("Frame")
     ax.set_ylabel(metric_label)
-    ax.set_title(f"{area_name} — {pair_label} (full vs. equal-population)")
+    ax.set_title(f"{area_name}: {pair_label} (full vs. equal-population)")
     ax.legend(loc="best", fontsize=9)
     ax.grid(True, alpha=0.3)
     return ax
@@ -1045,7 +1045,7 @@ def plot_clip_subsampling_comparison(
         ax.fill_between(x, q25, q75, color=color, alpha=0.18)
     ax.set_xlabel("Frame")
     ax.set_ylabel(metric_label)
-    ax.set_title("V1 — Clip-trial subsampling sanity check")
+    ax.set_title("V1: Clip-trial subsampling sanity check")
     ax.legend(loc="best", fontsize=8)
     ax.grid(True, alpha=0.3)
     return ax

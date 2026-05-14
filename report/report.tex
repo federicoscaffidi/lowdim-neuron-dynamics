@@ -1,0 +1,170 @@
+% =============================================================
+%  30563 -- Mathematical Modelling for Neuroscience
+%  Project report  ·  MICrONS  ·  Group: Casillo, Lombardi, Panella, Scaffidi Muta
+%  Body: 2 pages max (figures, tables, references excluded)
+%  Compile: pdflatex report.tex
+% =============================================================
+\documentclass[11pt,a4paper]{article}
+
+% --- Encoding & language ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+
+% --- Layout & typography ---
+\usepackage[a4paper,margin=2.2cm]{geometry}
+\usepackage{microtype}
+\usepackage{setspace}
+
+% --- Math ---
+\usepackage{amsmath,amssymb}
+
+% --- Figures & tables ---
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{caption}
+
+% --- Links ---
+\usepackage[hidelinks]{hyperref}
+
+\begin{document}
+
+% =============================================================
+%  COVER PAGE
+% =============================================================
+\begin{titlepage}
+  \centering
+  \vspace*{\fill}
+
+  {\small \textsc{30563 -- Mathematical Modelling for Neuroscience}}\\[0.5em]
+  {\small Final Project Report}\\[3em]
+
+  \rule{0.6\textwidth}{0.4pt}\\[1.4em]
+  {\Huge\bfseries The Shape of a Stimulus}\\[1em]
+  {\large\itshape Trajectory geometry of three stimulus classes\\in mouse visual cortex (MICrONS)}\\[1.4em]
+  \rule{0.6\textwidth}{0.4pt}\\[3em]
+
+  {\normalsize
+    Francesca Casillo \quad Alessandro Lombardi\\[0.3em]
+    Edoardo Panella \quad Federico Scaffidi Muta
+  }\\[2.5em]
+
+  {\small May 13, 2026}
+
+  \vspace*{\fill}
+\end{titlepage}
+
+% =============================================================
+\section{Introduction}
+The brain represents sensory input not in single cells but in the joint firing of large populations: a stimulus maps onto a region of activity space whose geometry encodes class identity and dynamics \cite{dayan2001}. Two complementary tools developed in the course probe this geometry. Linear dimensionality reduction (PCA) finds the high-variance axes of the code without reference to labels, providing a label-agnostic view of the data. Supervised decoders, in contrast, identify class-relevant directions directly. When the two views disagree, the disagreement is itself informative: it tells us whether class information lives in the same axes that explain most variance, or in lower-variance directions that PCA cannot see.
+
+The MICrONS Functional Connectomics dataset \cite{microns2025} offers a rare opportunity to deploy these tools at scale: roughly 8{,}000 simultaneously recorded neurons across V1 and three higher visual areas (AL, LM, RL) of mouse cortex, exposed to three stimulus classes spanning the natural-to-synthetic spectrum. Since V1 is the entry point of cortical vision and AL, LM, RL are dorsal-stream targets, comparing them tests whether class-related structure sharpens along the hierarchy or remains uniform across areas.
+
+% =============================================================
+\section{Research Question}
+Our primary question is whether \emph{Clip} (natural movies), \emph{Monet2} (textured noise) and \emph{Trippy} (synthetic waves) occupy distinguishable population states, and whether this separation holds equally across V1, AL, LM and RL. After a first round of results, the question refined itself: is the observed separation a genuine three-way structure, or a single one-dimensional \emph{naturalness boundary}? Does any area specialise on that boundary on a per-neuron basis?
+
+% =============================================================
+\section{Methodology}
+\paragraph{Session selection.} The 14 functional sessions in MICrONS were screened on five summary statistics (neuron count, median per-neuron activity, mean pupil diameter, mean treadmill speed, fraction of unknown trials) using a $|z|>2$ flag. Session \textbf{7\_5} was selected: 8{,}194 neurons (cohort median 8{,}176), no flagged metric, and a clean behavioural profile.
+
+\paragraph{Preprocessing.} Trials with running speed exceeding $|v|>1$ were removed (11 trials, 2.4\% of the session), since exploratory analysis showed that this small minority dominated the response--treadmill correlation. Each neuron's full-session timeseries was then linearly detrended (removing the $\sim$45\% photobleaching drift identified during EDA) and z-scored. 453 trials survived this pipeline (377 Clip, 38 Monet2, 38 Trippy).
+
+\paragraph{Three analyses, building on each other.} \emph{Experiment 1} fits PCA per cortical area to trial-averaged response vectors, with separability quantified by class-balanced silhouette in the top three PCs and by 5-fold cross-validated multinomial logistic regression accuracy on the full feature matrix. \emph{Experiment 2} preserves the within-trial time axis: for each (area, class) it builds a trial-averaged $75 \times N$ trajectory and measures pairwise Euclidean distance frame by frame, both in the top-3 PC subspace (the visualised geometry) and in the full neuron space (the honest test). Significance was assessed by 100 label-permutation shuffles, and variability by 1{,}000 class-stratified bootstrap resamples; PCA was held fixed during both procedures so that the resulting envelopes and nulls reflect trajectory uncertainty, not basis uncertainty. \emph{Experiment 3} applied the same trajectory pipeline within Clip, using the three content sub-categories provided by MICrONS (Cinematic, sports1m, Rendered).
+
+\paragraph{Controls.} Two controls address the obvious confounds. To rule out Clip's trial-count advantage, we sub-sampled Clip down to 38 trials and recomputed. To rule out V1's neuron-count advantage, every area was sub-sampled to AL's 414 neurons (20 random draws) and the pipeline rerun.
+
+% =============================================================
+\section{Results}
+
+\paragraph{4.1 The signal exists; PCA is not aligned with it (Exp.~1).}
+Cross-validated logistic regression on the full neuron-trial matrix achieves 98.9\% (V1), 98.0\% (LM), 97.8\% (RL) and 94.7\% (AL) against an 83.2\% majority baseline. The same data viewed through the top three principal components, however, yields a balanced silhouette that hovers around zero in every area. The class signal is therefore present and decodable, but does not align with the directions of highest variance. Standard PCA visualisations would have missed it, which motivated the trajectory-based analysis that follows.
+
+\paragraph{4.2 Trajectories: a measurement artefact corrected (Exp.~2).}
+In the PC1--PC2 plane each area produces three clean, stationary, non-overlapping clusters (Fig.~\ref{fig:pc-clusters}). A first significance test, performed in the same top-3 PC space, returned every pair significant at $p \approx 0.01$. This test is, however, biased: PCA was fit on real labels and the shuffled trajectories were projected through that same basis, so the projection step retains label information and inflates apparent distances. Repeating the test in the original feature space, where the projection plays no role, reverses the picture. Table~\ref{tab:honest} reports the honest-test $p$-values. Monet2$\leftrightarrow$Trippy fails to separate in any area, and the only synthetic split that survives the null is Clip$\leftrightarrow$Trippy in RL ($p = 0.02$). The Clip-vs-synthetic distinction, in contrast, is robust everywhere. Both controls pass: Clip sub-sampled to 38 trials reproduces the observed curves, and matching every area to AL's neuron count collapses V1's apparent advantage, leaving the four areas in a tight band on a per-neuron basis (Fig.~\ref{fig:controls}).
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+Area & Clip$\leftrightarrow$Monet2 & Clip$\leftrightarrow$Trippy & Monet2$\leftrightarrow$Trippy \\
+\midrule
+V1 & 0.58 & 0.06 & 0.37 \\
+AL & 0.45 & 0.22 & 0.76 \\
+LM & 0.29 & 0.09 & 0.48 \\
+RL & 0.10 & \textbf{0.02} & 0.29 \\
+\bottomrule
+\end{tabular}
+\caption{Honest-test $p$-values: maximum full-feature trajectory distance against the 100-shuffle null. Monet2$\leftrightarrow$Trippy never crosses the threshold.}
+\label{tab:honest}
+\end{table}
+
+\paragraph{4.3 Zooming inside Clip: AL as a naturalness detector (Exp.~3).}
+Within Clip, the three content sub-categories Cinematic, sports1m and Rendered separate at $p \leq 0.02$ in every area, with onset by frame 2 ($\sim$267~ms post stimulus onset); at the 7.5~Hz sampling rate no V1-first hierarchy is resolvable. After population matching, AL outperforms every other area on the two pairs that cross the natural/synthetic boundary (Cinematic$\leftrightarrow$Rendered and sports1m$\leftrightarrow$Rendered) but matches them on Cinematic$\leftrightarrow$sports1m, which is a natural-vs-natural contrast (Fig.~\ref{fig:al-naturalness}). The simplest reading is that AL does not encode content category per se; it encodes the same naturalness axis recovered in Experiment 2, recurring here within Clip.
+
+% =============================================================
+\section{Discussion}
+The primary question receives a partial answer. The Clip-vs-synthetic boundary is robust to controls and present in every area, so cortex does carry that signal linearly and uniformly. The finer Monet2-vs-Trippy distinction, by contrast, is invisible to linear methods at the population scale: PCA can be made to display it, but only because the basis itself is informed by the labels. Both experiments converge on a single organising dimension. Naturalness explains the inter-class structure in Experiment 2 and reappears as the dimension along which AL gains a per-neuron advantage in Experiment 3, suggesting functional differentiation along a natural/artificial axis rather than along content category.
+
+The headline methodological lesson is that fitting PCA on real labels and applying the same projection to shuffled data is a self-confirming test: when the projection step is informed by the labels, significance must be assessed in unprojected space. Several limitations qualify the biological reading. (i) Category encoding cannot be cleanly separated from low-level image statistics (brightness, contrast, motion energy) without statistic-matched stimuli. (ii) The analysis covers a single session; cohort-level generalisation is untested. (iii) Linear methods may simply miss non-linear structure: the Monet2$\leftrightarrow$Trippy collapse may reflect tool limitations rather than a coding failure. (iv) The connectomics half of MICrONS was not used; the structural-to-functional link remains open. Promising next steps include CEBRA \cite{cebra2023} or other non-linear contrastive embeddings aimed at the Monet2$\leftrightarrow$Trippy collapse, cross-session replication of AL's apparent naturalness-detector role, and a test of whether AL's per-neuron advantage aligns with the anatomical wiring exposed by the EM volume.
+
+% =============================================================
+\begin{thebibliography}{9}
+\bibitem{microns2025}
+The MICrONS Consortium. \emph{Functional connectomics spanning multiple
+areas of mouse visual cortex}. Nature, 2025.
+
+\bibitem{dayan2001}
+P.~Dayan and L.~F.~Abbott. \emph{Theoretical Neuroscience}. MIT Press, 2001.
+
+\bibitem{cebra2023}
+S.~Schneider, J.~H.~Lee, M.~W.~Mathis. \emph{Learnable latent embeddings for joint behavioural and neural analysis}. Nature, 617, 360--368 (2023).
+\end{thebibliography}
+
+% =============================================================
+\appendix
+\section{Figures}
+% Figures and tables don't count toward the 2-page limit.
+
+\begin{figure}[h]
+  \centering
+  \fbox{\rule{0pt}{4cm}\rule{0.85\textwidth}{0pt}} % placeholder
+  \caption{\textbf{Trial-averaged PSTH per stimulus class.}
+    Mean population response across all neurons of session 7\_5, averaged within each stimulus class and plotted against trial time. Trippy sits highest, Clip intermediate (with an onset transient in the first few frames), Monet2 lowest. Class identity is already encoded in the first moment of population activity.}
+  \label{fig:psth}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \fbox{\rule{0pt}{5cm}\rule{0.85\textwidth}{0pt}}
+  \caption{\textbf{Trial-averaged trajectories in PC1--PC2 space, per area.}
+    Four panels (V1, AL, LM, RL): three stationary, non-overlapping clusters per area. The frame-0 marker sits offset from each cluster's bulk, indicating a shared neutral starting point and a rapid jump to stimulus-specific addresses within the first few frames (the onset transient).}
+  \label{fig:pc-clusters}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \fbox{\rule{0pt}{5cm}\rule{0.85\textwidth}{0pt}}
+  \caption{\textbf{Honest vs.\ biased distance curves (Exp.~2).}
+    For each class pair: observed full-feature distance (solid) with bootstrap envelope (shaded), against the shuffle-null 95\textsuperscript{th} percentile (dashed). The biased top-3-PC test sits comfortably above its null in every pair; the honest full-feature test does not, for Monet2$\leftrightarrow$Trippy in any area.}
+  \label{fig:honest-biased}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \fbox{\rule{0pt}{4cm}\rule{0.85\textwidth}{0pt}}
+  \caption{\textbf{Population-size control.}
+    Maximum honest-test distance per area before and after matching every area to AL's 414 neurons (mean $\pm$ SD over 20 random draws). V1's apparent lead in the raw comparison disappears; all four areas collapse into the same narrow band on a per-neuron basis.}
+  \label{fig:controls}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \fbox{\rule{0pt}{5cm}\rule{0.85\textwidth}{0pt}}
+  \caption{\textbf{Within-Clip sub-category distances after population matching (Exp.~3).}
+    AL leads on Cinematic$\leftrightarrow$Rendered and sports1m$\leftrightarrow$Rendered (both natural-vs-synthetic contrasts) but matches the other areas on Cinematic$\leftrightarrow$sports1m (natural-vs-natural). The naturalness axis recurs.}
+  \label{fig:al-naturalness}
+\end{figure}
+
+\end{document}

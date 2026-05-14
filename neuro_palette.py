@@ -1,4 +1,4 @@
-"""neuro_palette — palette + matplotlib style for the MICrONS presentation.
+"""neuro_palette: palette + matplotlib style for the MICrONS presentation.
 
 White-background variant: keeps the saturated jewel-tone STIMULUS / SUBCATEGORY
 palettes, but the plot chrome (figure / axes / grid / text colours) is tuned

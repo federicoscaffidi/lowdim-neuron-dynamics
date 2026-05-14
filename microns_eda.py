@@ -1,17 +1,17 @@
-"""microns_eda — helper module for the MICrONS exploratory data analysis notebook.
+"""microns_eda: helper module for the MICrONS exploratory data analysis notebook.
 
 The module is organized in four sections:
 
-(a) Loading       — wrappers around MicronsFunctionalReader plus h5py fallback.
-(b) Aggregation   — per-session and cross-session summary statistics.
-(c) Analysis      — deep-dive diagnostics (per-neuron stats, correlation, drift).
-(d) Plotting      — thin matplotlib wrappers; all accept an optional `ax`.
+(a) Loading:     wrappers around MicronsFunctionalReader plus h5py fallback.
+(b) Aggregation: per-session and cross-session summary statistics.
+(c) Analysis:    deep-dive diagnostics (per-neuron stats, correlation, drift).
+(d) Plotting:    thin matplotlib wrappers; all accept an optional `ax`.
 
 Design constraints (see docs/specs/2026-04-30-microns-eda-design.md):
 - Data functions are pure: no plotting, no file writes.
 - Plotting functions accept `ax` so plots compose.
 - Every public function has a NumPy-style docstring with Args, Returns, Notes.
-- No magic constants — anything tunable is a parameter with a sensible default.
+- No magic constants: anything tunable is a parameter with a sensible default.
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ def open_dataset(datadir: str | Path) -> "MicronsFunctionalReader":
 
     Returns:
         A configured ``microns_datacleaner.MicronsFunctionalReader`` instance.
-        Reuse this object across loader calls — construction touches the H5
+        Reuse this object across loader calls; construction touches the H5
         file index and is not free.
 
     Notes:
@@ -60,8 +60,8 @@ def open_dataset(datadir: str | Path) -> "MicronsFunctionalReader":
 def open_h5(datadir: str | Path) -> Iterator[h5py.File]:
     """Open the MICrONS H5 read-only as a context manager.
 
-    The file is expected at ``{datadir}/functional/microns_functional.h5``
-    — the layout ``MicronsFunctionalReader`` looks for. If the file is
+    The file is expected at ``{datadir}/functional/microns_functional.h5``,
+    the layout ``MicronsFunctionalReader`` looks for. If the file is
     actually somewhere else on disk (e.g. ``{datadir}/microns.h5`` from a
     direct download), create a symlink at the expected path; the
     notebook's setup cell does this automatically when needed.
@@ -456,7 +456,7 @@ def summarize_all_sessions(reader, datadir: str | Path) -> pd.DataFrame:
         ``summarize_session``.
 
     Notes:
-        This is the slow part of Part 1 — expect minutes, not seconds.
+        This is the slow part of Part 1; expect minutes, not seconds.
         Each session is fully streamed once.
     """
     sessions = list_sessions(datadir)
@@ -490,7 +490,7 @@ def flag_outlier_sessions(summary_df: pd.DataFrame, z_thresh: float = 2.0) -> pd
 
         Robustness: a metric whose column is constant across all
         sessions (std = 0, e.g. ``n_Unknown`` when the library
-        classifies every trial cleanly) yields a z-score of 0 — no
+        classifies every trial cleanly) yields a z-score of 0, so no
         flag is raised, since "every session is identical" is not an
         outlier signal. A metric that is NaN everywhere (e.g. broken
         sensor) yields NaN z-scores, which never trip the |z| > 2
@@ -883,7 +883,7 @@ def plot_outlier_table(summary_df_with_flags: pd.DataFrame) -> pd.DataFrame:
         returning the result from a cell.
 
     Notes:
-        Kept simple — Jupyter renders DataFrames natively. We don't
+        Kept simple; Jupyter renders DataFrames natively. We don't
         build a styled HTML object because that complicates downstream
         copy/paste into reports.
     """
@@ -1102,7 +1102,7 @@ def plot_response_heatmap(
             (responses are typically non-negative).
         vmax: Upper bound of the color scale. If None, defaults to
             the 99th percentile of the *whole-session* responses
-            matrix — not the trial — so a few bright neurons don't
+            matrix (not the trial) so a few bright neurons don't
             wash out the structure visible in the rest. Pass an
             explicit value when comparing multiple trials so all
             heatmaps share a scale.
@@ -1116,7 +1116,7 @@ def plot_response_heatmap(
         the trial's frame count without distortion.
 
         Why percentile-clipping vmax? Per-neuron variance spans
-        several orders of magnitude in MICrONS — a tiny minority of
+        several orders of magnitude in MICrONS: a tiny minority of
         neurons hit values in the hundreds, while the bulk live in
         ~0–10. Linear-scaling the colormap against the maximum
         compresses the typical range to nearly black, hiding the
@@ -1261,7 +1261,7 @@ def plot_behavior_traces(
     ax_tread.set_ylabel("Treadmill speed")
     ax_tread.set_xlabel("Frame")
 
-    fig.suptitle(f"Trial {trial.get('condition_hash', '?')[:10]}… — {trial.get('stim_type', '?')}")
+    fig.suptitle(f"Trial {trial.get('condition_hash', '?')[:10]}… ({trial.get('stim_type', '?')})")
     fig.tight_layout()
     return fig, (ax_resp, ax_pupil, ax_tread)
 

@@ -1,21 +1,21 @@
-"""option2_pca_utils — helper module for the trial-averaged PCA notebook.
+"""option2_pca_utils: helper module for the trial-averaged PCA notebook.
 
 The module is organized in four sections:
 
-(a) Preprocessing and matrix construction — preprocess_responses,
+(a) Preprocessing and matrix construction: preprocess_responses,
     build_per_area_matrices.
-(b) Per-area analysis — fit_pca, balanced silhouette + null,
+(b) Per-area analysis: fit_pca, balanced silhouette + null,
     cross-validated logistic regression + null, population matching,
     run_area_pipeline.
-(c) Plotting — per-area scatters / scree / null histograms, cross-area
+(c) Plotting: per-area scatters / scree / null histograms, cross-area
     comparison plots.
-(d) Cross-session aggregation — read per-session CSVs and plot.
+(d) Cross-session aggregation: read per-session CSVs and plot.
 
 Design constraints (see docs/specs/2026-05-02-pca-design.md):
 - Data functions are pure: no plotting, no file writes.
 - Plotting functions accept ``ax`` (or ``fig`` for Plotly) so plots compose.
 - Every public function has a NumPy-style docstring with Args, Returns, Notes.
-- No magic constants — anything tunable is a parameter with a sensible default.
+- No magic constants: anything tunable is a parameter with a sensible default.
 - All randomness is seeded via the ``seed`` (or ``random_state``) parameter.
 """
 
@@ -35,7 +35,7 @@ from sklearn.model_selection import StratifiedKFold, cross_val_score
 
 
 # Shared visual conventions for stim-class colouring across all plotters.
-# Saturated jewel tones from neuro_palette.STIMULUS — designed for the
+# Saturated jewel tones from neuro_palette.STIMULUS, designed for the
 # presentation deck (works on both white and dark backgrounds).
 STIM_COLORS = {
     "Clip":   "#60A5FA",    # sky blue
@@ -67,14 +67,14 @@ def preprocess_responses(
     1. Optional ``log(1 + x)`` for variance stabilisation. Applied first
        because step 2 produces values that can be negative, which would
        break log.
-    2. Per-neuron linear detrend on the full session timeseries — fits a
+    2. Per-neuron linear detrend on the full session timeseries: fits a
        line ``a + b * t`` to each neuron's trace against time index, subtracts.
        Removes the photobleaching drift detected in EDA (~45% across session).
     3. Per-neuron z-score using post-detrend mean and standard deviation,
        so every neuron contributes on the same scale.
 
     Args:
-        responses: shape ``(n_neurons, total_timesteps)`` — the full neuron ×
+        responses: shape ``(n_neurons, total_timesteps)``, the full neuron ×
             time matrix returned by ``microns_eda.load_session_responses``.
         apply_log: if ``True``, apply ``log1p`` before detrending. The
             primary pipeline runs with ``apply_log=False``; the log variant
@@ -166,7 +166,7 @@ def build_per_area_matrices(
 
     Notes:
         Areas that the spec expects: ``{"V1", "AL", "LM", "RL"}``. The
-        function does not assume which areas exist — it iterates over the
+        function does not assume which areas exist: it iterates over the
         unique values of ``brain_areas``, so a session with only V1 still
         works.
     """
@@ -218,7 +218,7 @@ def fit_pca(
     """Fit a sklearn PCA and return both the estimator and the projection.
 
     Args:
-        X: shape ``(n_samples, n_features)`` — the trial-averaged matrix
+        X: shape ``(n_samples, n_features)``, the trial-averaged matrix
             for one cortical area; rows are trials, columns are neurons.
         n_components: number of PCs to retain. Default 10 (the analysis
             visualises top 3 and reports variance explained on top 20 in
@@ -256,8 +256,8 @@ def silhouette_balanced(
 
     Silhouette score is biased by class imbalance: a class with many trials
     contributes many same-class neighbour distances, distorting the score.
-    To remove this, we draw ``n_replicates`` balanced subsamples — each
-    contains ``min(class_counts)`` trials per class — compute silhouette
+    To remove this, we draw ``n_replicates`` balanced subsamples (each
+    contains ``min(class_counts)`` trials per class), compute silhouette
     on each, and average.
 
     The function is generic over the shape of ``X_pcs``; the caller decides
@@ -265,9 +265,9 @@ def silhouette_balanced(
     top-3 PCs.
 
     Args:
-        X_pcs: shape ``(n_samples, k)`` — coordinates in some space (PC,
+        X_pcs: shape ``(n_samples, k)``, coordinates in some space (PC,
             full feature, etc.).
-        labels: shape ``(n_samples,)`` — class labels (strings or ints).
+        labels: shape ``(n_samples,)``, class labels (strings or ints).
         n_replicates: number of balanced subsamples to average over.
         seed: master seed; per-replicate seeds derive deterministically.
 
@@ -377,13 +377,13 @@ def classify_cv(
     Trains a multinomial logistic regression on the full feature matrix
     (no PCA), with stratified K-fold cross-validation. The full matrix is
     used (rather than the top-K PCs) so this metric is independent of
-    PCA's variance-ranking — it answers "are stimuli linearly separable
+    PCA's variance-ranking: it answers "are stimuli linearly separable
     in neural state space?" without conditioning on top-variance directions.
 
     Args:
-        X: shape ``(n_samples, n_features)`` — the trial-averaged matrix
+        X: shape ``(n_samples, n_features)``, the trial-averaged matrix
             for one cortical area.
-        labels: shape ``(n_samples,)`` — class labels.
+        labels: shape ``(n_samples,)``, class labels.
         n_folds: number of stratified folds. Default 5.
         seed: random_state for the splitter and the classifier.
 
@@ -408,8 +408,8 @@ def classify_cv(
         matrix has more columns than rows (e.g., V1 has 5485 features and
         only 453 samples). ``max_iter`` is set to 5000 because the underdetermined
         p >> n case can need more iterations than the sklearn default. The
-        returned dict includes ``converged`` (bool) — ``False`` if any fold
-        raised ``sklearn.exceptions.ConvergenceWarning``; useful for downstream
+        returned dict includes ``converged`` (bool, ``False`` if any fold
+        raised ``sklearn.exceptions.ConvergenceWarning``); useful for downstream
         interpretation.
     """
     label_arr = np.asarray(labels)
@@ -540,9 +540,9 @@ def run_area_pipeline(
        full matrix + null distribution.
 
     Args:
-        X: shape ``(n_samples, n_neurons)`` — the trial-averaged matrix
+        X: shape ``(n_samples, n_neurons)``, the trial-averaged matrix
             for the area.
-        labels: shape ``(n_samples,)`` — stim class per trial.
+        labels: shape ``(n_samples,)``, stim class per trial.
         area_name: label used for logging / annotation only.
         n_components: PCs to retain.
         n_balance_replicates: passed to silhouette_balanced.
@@ -623,8 +623,8 @@ def plot_pca_2d(
     to Clip's 377 trials. Class centroids are overlaid as crosses.
 
     Args:
-        X_pcs: shape ``(n_trials, >=2)`` — needs at least PC1 and PC2.
-        labels: shape ``(n_trials,)`` — stim class per trial.
+        X_pcs: shape ``(n_trials, >=2)``, needs at least PC1 and PC2.
+        labels: shape ``(n_trials,)``, stim class per trial.
         area_name: used in title.
         pca: fitted PCA, used to extract variance-explained for axis labels.
         ax: matplotlib axes to draw on; created if None.
@@ -665,7 +665,7 @@ def plot_pca_2d(
     pc2_var = 100 * pca.explained_variance_ratio_[1]
     ax.set_xlabel(f"PC1 ({pc1_var:.1f}% var.)")
     ax.set_ylabel(f"PC2 ({pc2_var:.1f}% var.)")
-    ax.set_title(f"{area_name} — trials in PC1–PC2")
+    ax.set_title(f"{area_name}: trials in PC1–PC2")
     if show_legend:
         ax.legend(loc="best", fontsize=8, framealpha=0.9)
     ax.grid(True, alpha=0.3)
@@ -721,7 +721,7 @@ def plot_pca_3d_plotly(
 
     pc_var = 100 * pca.explained_variance_ratio_[:3]
     fig.update_layout(
-        title=f"{area_name} — trials in PC1–PC2–PC3",
+        title=f"{area_name}: trials in PC1–PC2–PC3",
         scene=dict(
             xaxis_title=f"PC1 ({pc_var[0]:.1f}% var.)",
             yaxis_title=f"PC2 ({pc_var[1]:.1f}% var.)",
@@ -744,7 +744,7 @@ def plot_scree(
     """Bar plot of per-PC variance ratios (elbow / scree plot).
 
     Shows how much variance each principal component captures individually.
-    The "elbow" is the visual point where the bars stop dropping steeply —
+    The "elbow" is the visual point where the bars stop dropping steeply,
     a common heuristic for choosing how many PCs to retain. For the
     cumulative trace, see :func:`plot_cumulative_variance`.
 
@@ -778,7 +778,7 @@ def plot_scree(
 
     ax.set_xlabel("Principal component")
     ax.set_ylabel("Variance explained (%)")
-    ax.set_title(f"{area_name} — variance explained per PC (top {n_show})")
+    ax.set_title(f"{area_name}: variance explained per PC (top {n_show})")
     ax.set_xticks(indices)
     ax.grid(True, alpha=0.3, axis="y")
     return ax
@@ -804,7 +804,7 @@ def plot_cumulative_variance(
         pca: fitted PCA.
         area_name: used in title.
         n_show: number of PCs to display. ``None`` (default) shows all
-            available PCs — needed to see the curve asymptote at 100%.
+            available PCs, needed to see the curve asymptote at 100%.
         thresholds: variance thresholds (in %) to mark on the plot.
         ax: matplotlib axes; created if None.
 
@@ -822,7 +822,7 @@ def plot_cumulative_variance(
     cumulative = np.cumsum(var_ratios) * 100
     indices = np.arange(1, n_show + 1)
 
-    # Clean curve — no per-point markers (they get noisy at large n_show).
+    # Clean curve, no per-point markers (they get noisy at large n_show).
     ax.plot(indices, cumulative, "-",
             color="darkred", linewidth=2.2, zorder=3)
 
@@ -843,7 +843,7 @@ def plot_cumulative_variance(
 
     ax.set_xlabel("Principal component (#)")
     ax.set_ylabel("Cumulative variance explained (%)")
-    ax.set_title(f"{area_name} — cumulative variance ({n_show} components)")
+    ax.set_title(f"{area_name}: cumulative variance ({n_show} components)")
 
     # XTicks: anchor at 1, n_show, and the threshold-crossing PCs.
     # Then add round multiples of 100 only if they don't crowd a threshold tick.
@@ -861,7 +861,7 @@ def plot_cumulative_variance(
     ax.set_ylim(0, 105)
     ax.grid(True, alpha=0.3)
 
-    # Inset table — directly answers "how many PCs for X% variance".
+    # Inset table: directly answers "how many PCs for X% variance".
     table_lines = ["threshold → # PCs"]
     for thr, pc_idx in threshold_to_pc:
         if pc_idx is None:
@@ -904,7 +904,7 @@ def _plot_metric_with_null(
     ax.set_xlabel(metric_label)
     ax.set_ylabel("Count")
     ax.set_title(
-        f"{area_name} — {metric_label} (empirical p = {p:.3f}, "
+        f"{area_name}: {metric_label} (empirical p = {p:.3f}, "
         f"n_shuffles = {n_shuffles})"
     )
     ax.legend(loc="best", fontsize=8)
@@ -978,7 +978,7 @@ def plot_cross_area_grid(
     Args:
         area_results: dict from area name to the dict returned by
             :func:`run_area_pipeline`.
-        labels: shape ``(n_trials,)`` — same labels used in every PCA.
+        labels: shape ``(n_trials,)``, same labels used in every PCA.
         figsize: figure size. Default (12, 10) gives ~6×5 per panel.
 
     Returns:
@@ -987,7 +987,7 @@ def plot_cross_area_grid(
     Notes:
         Areas not present in ``area_results`` produce empty panels.
         Default panel order: V1 (top-left), AL (top-right), LM (bottom-
-        left), RL (bottom-right) — the canonical visual-cortex layout.
+        left), RL (bottom-right): the canonical visual-cortex layout.
     """
     layout = [["V1", "AL"], ["LM", "RL"]]
     fig, axes = plt.subplots(2, 2, figsize=figsize)
@@ -1000,7 +1000,7 @@ def plot_cross_area_grid(
                 continue
             res = area_results[area]
             # show_legend=False so we can render a single shared figure-level
-            # legend below (Task 6 modification — keeps panels uncluttered).
+            # legend below (Task 6 modification: keeps panels uncluttered).
             plot_pca_2d(
                 res["X_pcs"], labels, area_name=area, pca=res["pca"], ax=ax,
                 show_legend=False,
@@ -1055,7 +1055,7 @@ def plot_cross_area_metric_bars(
     Notes:
         Each bar shows the observed value. Behind it, the area's null
         distribution is rendered as a thin grey vertical IQR range with a
-        white median tick — so the reader sees significance at a glance.
+        white median tick, so the reader sees significance at a glance.
         Empirical p-values are annotated above each bar.
     """
     if ax is None:
@@ -1176,7 +1176,7 @@ def plot_population_matched_comparison(
     ax.set_xticklabels(areas)
     ax.set_xlabel("Cortical area")
     ax.set_ylabel(metric_label)
-    ax.set_title(f"All-neurons vs population-matched — {metric_label}")
+    ax.set_title(f"All-neurons vs population-matched: {metric_label}")
     ax.legend(loc="best", fontsize=8)
     ax.grid(True, alpha=0.3, axis="y")
     return ax

@@ -1,12 +1,12 @@
-"""option4_clip_utils — helpers for the Clip-category trajectory analysis (Option 4).
+"""option4_clip_utils: helpers for the Clip-category trajectory analysis (Option 4).
 
 Sections:
 
-(a) Category labels and inventory — resolve condition_hash → short_movie_name,
+(a) Category labels and inventory: resolve condition_hash → short_movie_name,
     build per-trial labels, and compile the unique-clip inventory DataFrame.
-(b) Part-1 catalog plotting — balance table, trial-count histogram, category
+(b) Part-1 catalog plotting: balance table, trial-count histogram, category
     exemplars, frame-strip preview, and the big-picture 240-panel grid.
-(c) Pipeline glue for Part 2 — restrict-to-Clip helper and the cross-area
+(c) Pipeline glue for Part 2: restrict-to-Clip helper and the cross-area
     headline plotter (1×3 panels, all three pairs symmetrically).
 
 Design constraints (see docs/specs/2026-05-07-option4-clip-categories-design.md):
@@ -32,9 +32,9 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 
 CATEGORY_COLORS: dict[str, str] = {
-    "Cinematic": "#F87171",  # coral red — feature films
-    "sports1m":  "#22D3EE",  # cyan      — amateur sports
-    "Rendered":  "#A855F7",  # violet    — synthetic 3-D
+    "Cinematic": "#F87171",  # coral red, feature films
+    "sports1m":  "#22D3EE",  # cyan,      amateur sports
+    "Rendered":  "#A855F7",  # violet,    synthetic 3-D
 }
 CATEGORY_MARKERS: dict[str, str] = {"Cinematic": "o", "sports1m": "s", "Rendered": "^"}
 CATEGORY_ORDER: list[str] = ["Cinematic", "sports1m", "Rendered"]
@@ -98,7 +98,7 @@ def build_hash_to_category(h5_path: str | Path) -> dict[str, str]:
 
     Notes:
         Cached at module level keyed by ``str(h5_path)``. The H5 read is
-        cheap (~2 s) but the function may be called twice — once for the
+        cheap (~2 s) but the function may be called twice: once for the
         Part-1 catalog, once for the Part-2 trajectory labels.
     """
     key = str(Path(h5_path).resolve())
@@ -190,7 +190,7 @@ def restrict_to_clip(
 
     Args:
         clean_trial_indices: Output of
-            ``microns_eda.compute_clean_trial_indices`` — int array of
+            ``microns_eda.compute_clean_trial_indices``, an int array of
             trial indices that survive the running-outlier QC.
         stim_per_trial: Shape ``(n_trials_total,)``, output of
             :func:`category_labels_for_session` (full-session, pre-QC).
@@ -259,7 +259,7 @@ def build_clip_inventory(
         hashes_per_trial: Shape ``(n_trials,)``, decoded condition hashes
             for the trials of interest (typically the post-QC Clip subset).
         hash_to_category: Output of :func:`build_hash_to_category`.
-        h5_path: Path to ``microns_functional.h5`` — used to read
+        h5_path: Path to ``microns_functional.h5``, used to read
             ``movie_name`` attrs alongside the category dict.
 
     Returns:
@@ -359,7 +359,7 @@ def plot_category_exemplars(
     *,
     n_per_category: int = 8,
 ):
-    """3-row × n_per_category-col mid-frame thumbnails — exemplars per category.
+    """3-row × n_per_category-col mid-frame thumbnails: exemplars per category.
 
     Args:
         reader: A ``MicronsFunctionalReader``.
@@ -367,7 +367,7 @@ def plot_category_exemplars(
         n_per_category: Columns per row (default 8).
 
     Returns:
-        ``matplotlib.figure.Figure`` — caller saves and shows it.
+        ``matplotlib.figure.Figure``; caller saves and shows it.
     """
     fig, axes = plt.subplots(
         len(CATEGORY_ORDER), n_per_category,
@@ -473,7 +473,7 @@ def plot_full_thumbnail_grid(
     *,
     ncols: int = 16,
 ):
-    """The big-picture 240-panel grid — one mid-frame per unique Clip.
+    """The big-picture 240-panel grid: one mid-frame per unique Clip.
 
     Sorted by category (Cinematic block, sports1m block, Rendered block).
     Panel titles colored by category for fast visual chunking.
@@ -549,7 +549,7 @@ def plot_cross_area_three_pairs(
             envelopes (default ``"envelopes_full"``).
 
     Returns:
-        ``matplotlib.figure.Figure`` with 1×3 axes — one panel per pair
+        ``matplotlib.figure.Figure`` with 1×3 axes: one panel per pair
         in the order ``Cinematic↔sports1m``, ``Cinematic↔Rendered``,
         ``sports1m↔Rendered``.
     """
@@ -584,7 +584,7 @@ def plot_cross_area_three_pairs(
         ax.set_title(pair_labels[pair], color=pair_palette[pair])
         ax.legend(loc="best", fontsize=8, title="area")
         ax.grid(True, alpha=0.3)
-    fig.suptitle(f"Cross-area Clip-category pairwise distance — {metric_label}",
+    fig.suptitle(f"Cross-area Clip-category pairwise distance ({metric_label})",
                  fontsize=12, y=1.02)
     fig.tight_layout()
     return fig
