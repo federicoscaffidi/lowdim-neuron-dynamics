@@ -37,7 +37,7 @@ import pandas as pd
 from sklearn.decomposition import PCA
 
 # Reuse Option 2's stim conventions for visual consistency across the project.
-from option2_pca_utils import STIM_COLORS, STIM_MARKERS, STIM_ORDER
+from scripts.experiment1_utils import STIM_COLORS, STIM_MARKERS, STIM_ORDER
 
 
 # =============================================================================

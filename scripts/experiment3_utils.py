@@ -150,7 +150,7 @@ def category_labels_for_session(
     Notes:
         Decoded internally; callers do not deal with bytes.
     """
-    import microns_eda
+    import scripts.microns_eda as microns_eda
 
     h5_path = Path(datadir) / "functional" / "microns_functional.h5"
     hash_to_category = build_hash_to_category(h5_path)
