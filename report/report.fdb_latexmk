@@ -1,5 +1,5 @@
 # Fdb version 4
-["pdflatex"] 1778966976 "/Users/federicoscaffidimuta/Desktop/Third year/NS project/lowdim-neuron-dynamics/report/report.tex" "report.pdf" "report" 1778966979 0
+["pdflatex"] 1778967350 "/Users/federicoscaffidimuta/Desktop/Third year/NS project/lowdim-neuron-dynamics/report/report.tex" "report.pdf" "report" 1778967353 0
   "../figures/option2/7_5/5_cross_area_grid.png" 1778795040 430117 31c0a90312eafafcdc633e44b7d39cef ""
   "../figures/option2/7_5/5_cross_area_metric_bars.png" 1778795040 100861 a0d4f3c38d0fe8cd59d96a76f80c48bc ""
   "../figures/option3/7_5/0_5_psth_per_area.png" 1778795040 406295 a080bf9ca85ff1fb81351339a321b28a ""
@@ -10,7 +10,7 @@
   "../figures/option4/7_5/2_5_population_matched.png" 1778795040 848665 8beec7fd76b2616494360b73e58b20ee ""
   "../figures/option4/7_5/presentation/trajectories_2x2_simple.pdf" 1778857593 160060 77ce538703237b3947d7aa2d067a6e66 ""
   "../figures/presentation/cohort_z_scores.pdf" 1778857592 35793 e1b8c80d793fbed3727dbc9ff43255ef ""
-  "/Users/federicoscaffidimuta/Desktop/Third year/NS project/lowdim-neuron-dynamics/report/report.tex" 1778966973 20056 fdc642027aef0e97955ae2c5b89ba2de ""
+  "/Users/federicoscaffidimuta/Desktop/Third year/NS project/lowdim-neuron-dynamics/report/report.tex" 1778967350 19961 b56c0c37ce605bbf4d58c636da7c0257 ""
   "/usr/local/texlive/2023/texmf-dist/fonts/enc/dvips/cm-super/cm-super-t1.enc" 1136849721 2971 def0b6c1f0b107b3b936def894055589 ""
   "/usr/local/texlive/2023/texmf-dist/fonts/map/fontname/texfonts.map" 1577235249 3524 cb3e574dea2d1052e39280babc910dc8 ""
   "/usr/local/texlive/2023/texmf-dist/fonts/tfm/jknappen/ec/ecbx1000.tfm" 1136768653 3584 2d666ecf6d466d8b007246bc2f94d9da ""
@@ -131,9 +131,9 @@
   "/usr/local/texlive/2023/texmf-var/fonts/map/pdftex/updmap/pdftex.map" 1696194206 4623355 b8cad38412faebe1ce5b780a45db67bd ""
   "/usr/local/texlive/2023/texmf-var/web2c/pdftex/pdflatex.fmt" 1696194162 7883454 883cfa4f443aa449cf0c46b705e16b4f ""
   "/usr/local/texlive/2023/texmf.cnf" 1678822455 577 1b2b1af17af2508fb20dd85783af4050 ""
-  "report.aux" 1778966979 13329 13e9e46a4ec182431d98507ec1629cf1 "pdflatex"
-  "report.out" 1778966979 644 d79c3835f7cd6bf33313876f76d6827e "pdflatex"
-  "report.tex" 1778966973 20056 fdc642027aef0e97955ae2c5b89ba2de ""
+  "report.aux" 1778967353 13329 13e9e46a4ec182431d98507ec1629cf1 "pdflatex"
+  "report.out" 1778967353 644 d79c3835f7cd6bf33313876f76d6827e "pdflatex"
+  "report.tex" 1778967350 19961 b56c0c37ce605bbf4d58c636da7c0257 ""
   (generated)
   "report.aux"
   "report.log"
