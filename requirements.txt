@@ -1,11 +1,34 @@
-# List of required packages for the project
-numpy
-scipy
-pandas
-matplotlib
-seaborn
-scikit-learn
-microns_datacleaner
-cloud-volume
-h5py
-plotly
+# Generated 2026-09-15 from the actual imports in scripts/*.py, notebooks/*.ipynb
+# and convert_svgs.py. Nothing here is copied from the previous requirements.txt.
+#
+# VERSION CAVEAT — every pin below is a GUESS. The only readable versions on this
+# machine are the dist-info stubs in a hollow .venv (Python 3.9.6) that cannot
+# run the code; the committed results were produced under Python 3.11.15
+# (eda_preproc) and 3.12.2 (experiment1-3) per notebook metadata, with unknown
+# package versions. Re-pin from the environment used for the re-run:
+#   <TODO: Federico>  pip freeze > requirements.txt  (after the re-run)
+#
+# Python: 3.11 or 3.12 (the kernel versions recorded in the notebooks).
+
+# --- imported by scripts/ and notebooks/ ---
+numpy==2.0.2              # guessed (.venv dist-info)  all modules
+pandas==2.3.3             # guessed (.venv dist-info)  all modules
+matplotlib==3.9.4         # guessed (.venv dist-info)  all modules
+scikit-learn==1.6.1       # guessed (.venv dist-info)  experiment1_utils, experiment2_utils
+h5py==3.14.0              # guessed (.venv dist-info)  microns_eda, experiment3_utils
+plotly==6.7.0             # guessed (.venv dist-info)  3-D figures (write_html)
+seaborn==0.13.2           # guessed (.venv dist-info)  eda_preproc.ipynb only
+microns_datacleaner==0.2.1.7  # guessed (.venv dist-info)  MicronsFunctionalReader; source index not recorded
+
+# --- needed to execute the notebooks (not imported by project code) ---
+jupyterlab                # no version readable anywhere — unpinned <TODO: Federico>
+nbclient                  # no version readable anywhere — unpinned <TODO: Federico>
+nbformat                  # no version readable anywhere — unpinned <TODO: Federico>
+
+# --- convert_svgs.py only (SVG -> PDF for the three report figures) ---
+cairosvg                  # no version readable anywhere — unpinned <TODO: Federico>
+
+# --- declared in the old requirements.txt but never imported by project code ---
+# scipy==1.13.1           # present in .venv; not imported anywhere
+# cloud-volume==12.13.1   # present in .venv; not imported anywhere (may be a
+#                         # transitive dependency of microns_datacleaner — unverified)

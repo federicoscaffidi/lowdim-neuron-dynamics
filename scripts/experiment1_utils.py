@@ -1200,7 +1200,7 @@ def aggregate_cross_session(
 
     Args:
         results_root: directory containing per-session subdirs (e.g.
-            ``Path("results/option2")``).
+            ``Path("results/exp1_trial_averaged_pca")``).
         analysis_filter: which ``analysis`` rows to keep. Default
             ``"all_neurons"`` (the primary analysis). Other valid values
             include ``"equal_population"`` and ``"log_sensitivity"``.

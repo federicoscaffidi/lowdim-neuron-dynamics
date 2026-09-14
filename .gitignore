@@ -222,3 +222,30 @@ __marimo__/
 
 # macOS
 .DS_Store
+
+# ---------------------------------------------------------------------------
+# Added in the 2026-09 repo rework (see docs/rework-recommendations.md)
+# ---------------------------------------------------------------------------
+
+# Deposited result caches: fetched by scripts/fetch_results.py, not tracked.
+# (The two currently tracked .npz files stay until the Phase 3 removal.)
+results/**/*.npz
+
+# Raw MICrONS data lives under data/ locally; only the deposit docs are tracked.
+data/*
+!data/README.md
+!data/MANIFEST.tsv
+!data/MANIFEST.sha256
+
+# Presentation decks and LaTeX build products found tracked at HEAD by the audit.
+*.pptx
+*.docx
+*.aux
+*.fdb_latexmk
+*.fls
+*.synctex*
+report/*.out
+report/*.pdf
+
+# Audit helper kept out of the tree.
+repo_audit.sh
