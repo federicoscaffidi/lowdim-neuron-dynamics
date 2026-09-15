@@ -392,14 +392,17 @@ def _trajectories_from_trial_tensor(
     trials_t_n: np.ndarray,
     labels: np.ndarray,
 ) -> dict[str, np.ndarray]:
-    """Build per-stim trajectories from a (n_trials, n_frames, n_neurons) tensor."""
-    out: dict[str, np.ndarray] = {}
-    for stim in np.unique(labels):
-        mask = labels == stim
-        if not mask.any():
-            continue
-        out[stim] = trials_t_n[mask].mean(axis=0)
-    return out
+    """Build per-stim trajectories from a (n_trials, n_frames, n_neurons) tensor.
+
+    One BLAS pass over the tensor (a class-indicator weight matrix contracted
+    against the trial axis) instead of one fancy-index copy per class; the
+    shuffle null calls this once per permutation on a ~1.5 GB V1 tensor.
+    """
+    stims = np.unique(labels)
+    weights = (labels[None, :] == stims[:, None]).astype(np.float64)
+    weights /= weights.sum(axis=1, keepdims=True)
+    means = np.tensordot(weights, trials_t_n, axes=(1, 0))  # (n_stim, n_frames, n_neurons)
+    return {stim: means[i] for i, stim in enumerate(stims)}
 
 
 def bootstrap_distance_envelope(

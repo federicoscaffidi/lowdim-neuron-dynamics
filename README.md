@@ -9,7 +9,11 @@ MICrONS functional dataset.
 > that the **onset latencies** in experiments 2–3 and the **equal-population
 > p-values** in experiment 1 were produced by invalid procedures; the code is
 > fixed on this branch but the CSVs have not been regenerated, so those columns
-> are unsupported until the notebooks are re-run. Sections marked
+> are unsupported until the notebooks are re-run. No p-value in the committed
+> CSVs is corrected for multiple comparisons, and with the 100 shuffles they
+> were computed with none could have passed a correction (floor 1/101 vs
+> 0.05/12); the re-run uses 1000 shuffles and writes a Holm-adjusted `p_holm`.
+> Sections marked
 > `<TODO: Federico>` need a decision or a claim only the authors can make.
 
 ## Headline result

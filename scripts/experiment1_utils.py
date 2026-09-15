@@ -488,6 +488,43 @@ def classify_cv_null(
     return null
 
 
+def holm_adjust(pvals) -> np.ndarray:
+    """Holm step-down adjusted p-values for one family of tests.
+
+    Holm controls the family-wise error rate at the same level as
+    Bonferroni but is uniformly more powerful; reject ``H_i`` when
+    ``p_holm_i < alpha``. NaN entries are left NaN and excluded from the
+    family size.
+
+    Note on resolution: an empirical permutation p-value cannot go below
+    ``1 / (n_shuffles + 1)``. With ``m`` tests the smallest Holm threshold
+    is ``alpha / m``, so ``n_shuffles`` must exceed ``m / alpha - 1`` for
+    any test to be able to pass (12 tests at alpha = 0.05 need > 239
+    shuffles; 100 shuffles can never pass a family of more than 5).
+
+    Args:
+        pvals: 1-D array-like of raw p-values (NaN allowed).
+
+    Returns:
+        Array of the same length with Holm-adjusted p-values in ``[0, 1]``.
+    """
+    p = np.asarray(pvals, dtype=np.float64)
+    out = np.full(p.shape, np.nan)
+    ok = ~np.isnan(p)
+    m = int(ok.sum())
+    if m == 0:
+        return out
+    order = np.argsort(p[ok])
+    sorted_p = p[ok][order]
+    adj = (m - np.arange(m)) * sorted_p
+    adj = np.maximum.accumulate(adj)  # step-down: running max from the smallest p
+    adj = np.minimum(adj, 1.0)
+    tmp = np.empty(m)
+    tmp[order] = adj
+    out[ok] = tmp
+    return out
+
+
 def match_population_size(
     X: np.ndarray,
     n_match: int,
