@@ -5,9 +5,12 @@ mouse visual cortex (areas V1, AL, LM, RL), using one session (`7_5`) of the
 MICrONS functional dataset.
 
 > Status (2026-09-15): all numbers below are the values committed before the
-> planned correctness review and re-run. They will be refreshed after the
-> re-run. Sections marked `<TODO: Federico>` need a decision or a claim only
-> the authors can make.
+> correctness review and re-run. The review (`docs/review-findings.md`) found
+> that the **onset latencies** in experiments 2–3 and the **equal-population
+> p-values** in experiment 1 were produced by invalid procedures; the code is
+> fixed on this branch but the CSVs have not been regenerated, so those columns
+> are unsupported until the notebooks are re-run. Sections marked
+> `<TODO: Federico>` need a decision or a claim only the authors can make.
 
 ## Headline result
 
@@ -21,7 +24,12 @@ so 0.0099 is the floor):
 | 1 | 5-fold CV logistic-regression accuracy, Clip/Monet2/Trippy (null p95) | 0.989 (0.823) | 0.947 (0.804) | 0.980 (0.819) | 0.978 (0.819) | `results/exp1_trial_averaged_pca/7_5/silhouette_scores.csv` |
 | 1 | balanced silhouette in top-3 PCs (null p95) | 0.021 (−0.030) | −0.018 (−0.035) | 0.031 (−0.030) | 0.011 (−0.032) | same |
 | 2 | max full-feature trajectory distance Monet2↔Trippy, observed / null p95 / p | 19.96 / 21.46 / 0.37 | 5.30 / 6.12 / 0.76 | 9.48 / 10.63 / 0.48 | 8.68 / 9.21 / 0.29 | `results/exp2_stim_trajectories/7_5/trajectory_metrics.csv` |
-| 3 | max full-feature distance Cinematic↔sports1m, observed / null p95 / p / onset | 13.39 / 11.52 / 0.0099 / 267 ms | 3.71 / 3.32 / 0.0099 / 267 ms | 6.68 / 5.72 / 0.0099 / 267 ms | 5.36 / 5.06 / 0.0099 / 267 ms | `results/exp3_clip_categories/7_5/trajectory_metrics.csv` |
+| 3 | max full-feature distance Cinematic↔sports1m, observed / null p95 / p / onset | 13.39 / 11.52 / 0.0099 / ~~267 ms~~ | 3.71 / 3.32 / 0.0099 / ~~267 ms~~ | 6.68 / 5.72 / 0.0099 / ~~267 ms~~ | 5.36 / 5.06 / 0.0099 / ~~267 ms~~ | `results/exp3_clip_categories/7_5/trajectory_metrics.csv` |
+
+Struck-through onsets: see the status note. The experiment-3 p-values were
+computed with a trial-level permutation although 232 of the 377 Clip trials
+are repeats of the same clip; the fixed code permutes between clips and will
+give different (larger) p-values on re-run.
 
 Neuron counts: V1 5485, AL 414, LM 1262, RL 1033. Clean trials: 453
 (Clip 377, Monet2 38, Trippy 38); within Clip: Cinematic 127, sports1m 127,
@@ -40,17 +48,25 @@ pip install -r requirements.txt                          # versions are guesses;
 ```
 
 **Data.** The notebooks read `${MICRONS_DATADIR}/functional/microns_functional.h5`
-(~20.6 GB). Source of the file: `<TODO: Federico>` (URL/DOI and the exact
-release; nothing in the repo records it). Then:
+(~20.6 GB, 14 sessions). The `microns_datacleaner` package that the loaders
+wrap (version 0.2.1.7, the one recorded in the local environment) downloads
+this file from
+
+    https://huggingface.co/datasets/NeuroBLab/MICrONS/resolve/main/microns.h5
+
+(`microns_datacleaner/downloader.py`, `download_functional_data`) and expects
+it at the path above. `<TODO: Federico>` — confirm this is the file the
+committed results were produced from, and whether the HF dataset has a
+revision to pin. Then:
 
 ```bash
 export MICRONS_DATADIR=/path/to/dir            # default if unset: ../neuroscience
 ```
 
 **Run.** The notebooks import `scripts.*` and write `figures/…`, `results/…`
-relative to the **repo root**, so the kernel's working directory must be the
-repo root (this is VS Code's default for notebooks; it is *not* JupyterLab's).
-From the root:
+relative to the **repo root**. The first code cell of every notebook now
+`chdir`s up one level if the kernel was started inside `notebooks/`, so both
+VS Code and JupyterLab work. From the root:
 
 ```bash
 python -c "
@@ -130,6 +146,13 @@ All randomness is derived from `RANDOM_SEED = 42`.
   and the cells that write `trajectories.npz` have no execution count), so the
   committed outputs are from an earlier notebook state. A full re-run is
   planned.
+- Raw trajectory distances carry a sampling-noise floor of
+  `sqrt(N·(1/n_A + 1/n_B))` (z-scored units) that depends on trial counts and
+  population size; only the `max_distance_cv` column (split-half, added in the
+  review) is comparable across pairs and areas. The committed CSVs predate
+  that column.
+- "Cinematic" in experiment 3 is 8 films (127 trials); a category difference
+  is not separable from a film-set difference with this design.
 - `SESSION`, the treadmill threshold (1.0) and the 75-frame truncation are
   hard-coded per notebook.
 - The raw dataset is not distributed and its source is not recorded here.

@@ -190,6 +190,14 @@ def build_per_area_matrices(
     for out_idx, trial_idx in enumerate(clean_trial_indices):
         start = int(trial_boundaries[trial_idx])
         end = start + n_frames  # truncate
+        # Guard: a trial shorter than n_frames would silently read into the
+        # next trial's frames.
+        if end > int(trial_boundaries[trial_idx + 1]):
+            raise ValueError(
+                f"trial {trial_idx} has "
+                f"{int(trial_boundaries[trial_idx + 1]) - start} frames, "
+                f"fewer than n_frames={n_frames}"
+            )
         window = responses_preprocessed[:, start:end]  # (n_neurons, n_frames)
         averaged[out_idx, :] = window.mean(axis=1)
 

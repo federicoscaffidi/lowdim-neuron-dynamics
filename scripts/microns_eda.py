@@ -16,6 +16,7 @@ Design constraints (see docs/specs/2026-04-30-microns-eda-design.md):
 
 from __future__ import annotations
 
+import warnings
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
@@ -730,6 +731,15 @@ def compute_clean_trial_indices(
         function is provided as a single point of truth so the EDA and
         downstream analyses (PCA, CEBRA) all use the same rule.
     """
+    per_trial_tread_means = np.asarray(per_trial_tread_means, dtype=np.float64)
+    n_nan = int(np.isnan(per_trial_tread_means).sum())
+    if n_nan:
+        # NaN > threshold is False, so such trials would be kept silently.
+        warnings.warn(
+            f"{n_nan} trial(s) have NaN mean treadmill speed and are kept "
+            f"as clean; they could not be screened for running.",
+            stacklevel=2,
+        )
     running_mask = np.abs(per_trial_tread_means) > threshold
     keep_mask = ~running_mask
     clean_trial_indices = np.where(keep_mask)[0]

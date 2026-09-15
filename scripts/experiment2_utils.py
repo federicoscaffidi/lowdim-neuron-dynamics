@@ -8,6 +8,7 @@ The module is organized in four sections:
 (c) Distance metrics, bootstrap, null, and subsample pipelines:
     pairwise_trajectory_distance, bootstrap_distance_envelope,
     shuffle_null_max_distance, compute_onset_latency,
+    crossvalidated_distance,
     subsample_population_run_pipeline, subsample_clip_trials_run_pipeline.
 (d) Plotting: PSTH per area, 2-D / 3-D trajectory plots, distance time-course
     panels, cross-area headline, equal-population comparison, Clip-subsampling
@@ -122,6 +123,14 @@ def build_stim_trajectories(
         for out_idx, trial_idx in enumerate(clean_trial_indices):
             start = int(trial_boundaries[trial_idx])
             end = start + n_frames
+            # Guard: a trial shorter than n_frames would silently read into
+            # the next trial's frames.
+            if end > int(trial_boundaries[trial_idx + 1]):
+                raise ValueError(
+                    f"trial {trial_idx} has "
+                    f"{int(trial_boundaries[trial_idx + 1]) - start} frames, "
+                    f"fewer than n_frames={n_frames}"
+                )
             window = responses_preprocessed[cols, start:end]  # (n_a, n_frames)
             trials_t_n[out_idx] = window.T  # (n_frames, n_a)
 
@@ -322,6 +331,63 @@ def _resample_per_class(
     return trial_responses[out_idx], labels[out_idx]
 
 
+def _permute_labels(
+    labels: np.ndarray,
+    rng: np.random.Generator,
+    *,
+    groups: np.ndarray | None = None,
+) -> np.ndarray:
+    """Permute labels across trials, or across groups of trials.
+
+    With ``groups=None`` this is ``rng.permutation(labels)``. With ``groups``
+    (one id per trial, e.g. the clip hash), every trial of a group carries
+    the same label and the permutation reassigns labels *between groups*, so
+    repeated presentations of the same stimulus stay together. That is the
+    exchangeable unit when trials are repeats of a smaller set of stimuli;
+    permuting at trial level in that situation understates the variance of
+    the class means and makes p-values optimistic.
+
+    Class trial counts are preserved exactly in the trial-level case and
+    only approximately in the group-level case (groups have unequal sizes).
+    """
+    if groups is None:
+        return rng.permutation(labels)
+    groups = np.asarray(groups)
+    uniq, first_idx = np.unique(groups, return_index=True)
+    group_labels = labels[first_idx]
+    # Every trial in a group must share the label, otherwise the group is
+    # not a valid exchangeable unit.
+    for g, lab in zip(uniq, group_labels):
+        members = labels[groups == g]
+        if not np.all(members == lab):
+            raise ValueError(f"group {g!r} carries more than one label")
+    permuted = rng.permutation(group_labels)
+    lookup = dict(zip(uniq, permuted))
+    return np.array([lookup[g] for g in groups], dtype=labels.dtype)
+
+
+def _bootstrap_trial_counts(
+    n_trials: int,
+    rng: np.random.Generator,
+    *,
+    group_ids: np.ndarray | None = None,
+) -> np.ndarray:
+    """Per-trial multiplicities for one bootstrap draw within a class.
+
+    Trial-level: ``n_trials`` draws with replacement over trials. Group-level
+    (``group_ids`` given, one id per trial): draws with replacement over the
+    unique groups, and every trial of a drawn group is included once per
+    draw (a cluster bootstrap).
+    """
+    if group_ids is None:
+        idx = rng.integers(0, n_trials, size=n_trials)
+        return np.bincount(idx, minlength=n_trials).astype(np.float64)
+    uniq, inverse = np.unique(group_ids, return_inverse=True)
+    drawn = rng.integers(0, len(uniq), size=len(uniq))
+    group_counts = np.bincount(drawn, minlength=len(uniq)).astype(np.float64)
+    return group_counts[inverse]
+
+
 def _trajectories_from_trial_tensor(
     trials_t_n: np.ndarray,
     labels: np.ndarray,
@@ -345,14 +411,27 @@ def bootstrap_distance_envelope(
     n_pcs: int = 3,
     n_boot: int = 1000,
     seed: int = 42,
+    groups: np.ndarray | None = None,
 ) -> dict[frozenset[str], dict[str, np.ndarray]]:
-    """95% bootstrap envelope on each pairwise trajectory distance.
+    """Bootstrap band on each pairwise trajectory distance (plotting only).
 
     For each of ``n_boot`` iterations, class-stratified resamples the trials,
     rebuilds per-stim trajectories from the resampled tensor, and recomputes
     pairwise distances. Returns the 2.5/97.5 percentile envelopes per pair
     per frame. **PCA is NOT refit**; it is fixed at the supplied basis to keep
     variability attributable to the trajectories, not the basis.
+
+    **This band is not a confidence interval for the true distance and must
+    not be compared against a shuffle null.** The statistic is a Euclidean
+    norm of a difference of noisy means; its expectation is
+    ``sqrt(d_true^2 + noise)`` with ``noise ~ N * (1/n_a + 1/n_b)`` in
+    z-scored units. A bootstrap resample adds a *second* independent draw of
+    that noise term, so the whole band sits above the observed curve by
+    roughly the amount the observed curve sits above the truth. With no
+    class difference at all, the 2.5th percentile of this band still clears
+    the 95th percentile of the shuffle-null maximum on every frame. Use
+    :func:`compute_onset_latency` (observed curve vs null) for inference and
+    :func:`crossvalidated_distance` for a bias-corrected magnitude.
 
     Args:
         trial_tensor: ``(n_trials, n_frames, n_neurons_in_area)``, the per-area
@@ -364,6 +443,9 @@ def bootstrap_distance_envelope(
         n_pcs: passed to distance computation.
         n_boot: number of bootstrap iterations.
         seed: master seed.
+        groups: optional ``(n_trials,)`` group id per trial (e.g. clip
+            hash). When given, resampling is done over groups within each
+            class (cluster bootstrap) instead of over individual trials.
 
     Returns:
         Dict keyed by frozenset of stim-pair names; each value is a dict
@@ -386,11 +468,14 @@ def bootstrap_distance_envelope(
     # ~1 GB allocation per stim for V1) and compute per-bootstrap means via
     # bincount + einsum, avoiding the ~1.5 GB tensor copy that the naïve
     # ``_resample_per_class`` produces at every iteration.
+    group_arr = None if groups is None else np.asarray(groups)
     stim_subtensors: dict[str, np.ndarray] = {}
+    stim_groups: dict[str, np.ndarray | None] = {}
     for stim in np.unique(label_arr):
         mask = label_arr == stim
         if mask.any():
             stim_subtensors[stim] = trial_tensor[mask]
+            stim_groups[stim] = None if group_arr is None else group_arr[mask]
 
     accum = {pk: np.empty((n_boot, n_frames)) for pk in pair_keys}
     for b in range(n_boot):
@@ -399,10 +484,11 @@ def bootstrap_distance_envelope(
         traj: dict[str, np.ndarray] = {}
         for stim, subtensor in stim_subtensors.items():
             n = subtensor.shape[0]
-            idx = sub_rng.integers(0, n, size=n)  # sample with replacement
-            counts = np.bincount(idx, minlength=n).astype(np.float64)
-            # Weighted mean = sum_i counts[i] * subtensor[i] / n
-            traj[stim] = np.einsum("i,ijk->jk", counts, subtensor) / n
+            counts = _bootstrap_trial_counts(
+                n, sub_rng, group_ids=stim_groups[stim]
+            )
+            # Weighted mean = sum_i counts[i] * subtensor[i] / sum(counts)
+            traj[stim] = np.einsum("i,ijk->jk", counts, subtensor) / counts.sum()
         pairs = pairwise_trajectory_distance(
             traj, metric=metric, pca=pca, n_pcs=n_pcs
         )
@@ -428,6 +514,7 @@ def shuffle_null_max_distance(
     n_pcs: int = 3,
     n_shuffles: int = 100,
     seed: int = 42,
+    groups: np.ndarray | None = None,
 ) -> dict[frozenset[str], np.ndarray]:
     """Null distribution of max pairwise trajectory distance under label shuffle.
 
@@ -442,6 +529,10 @@ def shuffle_null_max_distance(
         metric, pca, n_pcs: same.
         n_shuffles: number of label permutations.
         seed: master seed.
+        groups: optional ``(n_trials,)`` group id per trial. When given,
+            labels are permuted between groups, not between trials (see
+            :func:`_permute_labels`). Use it whenever several trials are
+            repeats of the same stimulus.
 
     Returns:
         Dict keyed by frozenset of stim-pair names; each value is a
@@ -462,7 +553,7 @@ def shuffle_null_max_distance(
 
     nulls = {pk: np.empty(n_shuffles) for pk in pair_keys}
     for s in range(n_shuffles):
-        shuffled = rng.permutation(label_arr)
+        shuffled = _permute_labels(label_arr, rng, groups=groups)
         traj = _trajectories_from_trial_tensor(trial_tensor, shuffled)
         pairs = pairwise_trajectory_distance(
             traj, metric=metric, pca=pca, n_pcs=n_pcs
@@ -473,28 +564,138 @@ def shuffle_null_max_distance(
 
 
 def compute_onset_latency(
-    distance_lower_envelope: np.ndarray,
-    null_distribution: np.ndarray,
+    observed_distance: np.ndarray,
+    null_max_distribution: np.ndarray,
     *,
     alpha: float = 0.05,
 ) -> int | None:
-    """First frame at which bootstrap-lower exceeds null (1-alpha) percentile.
+    """First frame at which the observed distance exceeds the null of the max.
+
+    The threshold is the ``(1 - alpha)`` quantile of the shuffle-null
+    distribution of the *maximum over frames* (from
+    :func:`shuffle_null_max_distance`). Testing every frame against the
+    null of the max is the max-T (Westfall–Young) correction, so the
+    family-wise error rate over the 75 frames is ``alpha``. A pair whose
+    observed maximum is below the threshold (empirical p >= alpha)
+    automatically gets no onset.
+
+    Earlier versions compared the *bootstrap lower envelope* against this
+    threshold. That criterion fires on pure noise (see the note in
+    :func:`bootstrap_distance_envelope`) and produced onsets for pairs
+    with p > 0.3; it is no longer used.
 
     Args:
-        distance_lower_envelope: shape ``(n_frames,)``, the 2.5th-percentile
-            bootstrap envelope of the observed pairwise distance.
-        null_distribution: shape ``(n_shuffles,)``, the shuffle null max
-            distances (used to compute the upper threshold).
+        observed_distance: shape ``(n_frames,)``, the observed pairwise
+            distance time course (from :func:`pairwise_trajectory_distance`).
+        null_max_distribution: shape ``(n_shuffles,)``, the shuffle null of
+            the max distance for the same pair and metric.
         alpha: significance level. Default 0.05.
 
     Returns:
-        Onset frame index (0-based, integer) at which the lower envelope
-        first exceeds the ``(1 - alpha) * 100``-th percentile of the null.
-        Returns ``None`` if no frame satisfies.
+        Onset frame index (0-based, integer), or ``None`` if the observed
+        curve never exceeds the threshold.
     """
-    threshold = float(np.percentile(null_distribution, 100 * (1 - alpha)))
-    crosses = np.where(distance_lower_envelope > threshold)[0]
+    threshold = float(np.percentile(null_max_distribution, 100 * (1 - alpha)))
+    crosses = np.where(np.asarray(observed_distance) > threshold)[0]
     return int(crosses[0]) if len(crosses) else None
+
+
+def crossvalidated_distance(
+    trial_tensor: np.ndarray,
+    labels: np.ndarray,
+    *,
+    metric: str = "full",
+    pca: PCA | None = None,
+    n_pcs: int = 3,
+    n_splits: int = 20,
+    seed: int = 42,
+    groups: np.ndarray | None = None,
+) -> dict[frozenset[str], np.ndarray]:
+    """Bias-corrected (split-half) pairwise distance between class means.
+
+    The plain distance ``||mean_a - mean_b||`` is inflated by sampling noise:
+    its expectation is ``sqrt(d_true^2 + N * sigma^2 * (1/n_a + 1/n_b))``.
+    In z-scored data with N neurons this floor is ``sqrt(N (1/n_a + 1/n_b))``
+    and depends on the trial counts, so raw distances are not comparable
+    between pairs with different ``n`` or between areas with different
+    ``N``. This estimator removes the bias: trials of each class are split
+    into two random halves, and the inner product
+    ``<mean_a1 - mean_b1, mean_a2 - mean_b2>`` is unbiased for ``d_true^2``
+    because the two halves carry independent noise. The result is averaged
+    over ``n_splits`` random splits and reported as a signed square root
+    (negative values mean the estimate of ``d_true^2`` is below zero, i.e.
+    no separation).
+
+    Args:
+        trial_tensor: ``(n_trials, n_frames, n_neurons)``.
+        labels: ``(n_trials,)``.
+        metric, pca, n_pcs: as in :func:`pairwise_trajectory_distance`. For
+            ``"top_pcs"`` both halves are projected through ``pca`` before
+            the inner product.
+        n_splits: number of random half-splits to average over.
+        seed: master seed.
+        groups: optional ``(n_trials,)`` group id per trial. When given, the
+            split is done over groups so repeats of one stimulus never land
+            in both halves (which would re-introduce correlated noise).
+
+    Returns:
+        Dict keyed by frozenset of stim-pair names; each value is
+        ``(n_frames,)`` of signed bias-corrected distances.
+    """
+    if metric not in ("full", "top_pcs"):
+        raise ValueError(f"metric must be 'full' or 'top_pcs', got {metric!r}")
+    if metric == "top_pcs" and pca is None:
+        raise ValueError("pca must be supplied when metric='top_pcs'")
+
+    rng = np.random.default_rng(seed)
+    label_arr = np.asarray(labels)
+    group_arr = None if groups is None else np.asarray(groups)
+    stims = sorted(np.unique(label_arr))
+    n_frames = trial_tensor.shape[1]
+
+    def _project(traj: np.ndarray) -> np.ndarray:
+        if metric == "top_pcs":
+            return pca.transform(traj)[:, :n_pcs]
+        return traj
+
+    # Per-class index pools (trial indices, and the unit to split over).
+    pools: dict[str, np.ndarray] = {s: np.where(label_arr == s)[0] for s in stims}
+
+    def _half_masks(idx: np.ndarray, sub_rng: np.random.Generator):
+        """Return (idx_half1, idx_half2) splitting trials (or groups) in two."""
+        if group_arr is None:
+            perm = sub_rng.permutation(idx)
+            half = len(perm) // 2
+            return perm[:half], perm[half:]
+        uniq = np.unique(group_arr[idx])
+        perm_groups = sub_rng.permutation(uniq)
+        half = len(perm_groups) // 2
+        g1 = set(perm_groups[:half].tolist())
+        in1 = np.array([group_arr[i] in g1 for i in idx])
+        return idx[in1], idx[~in1]
+
+    accum = {frozenset({a, b}): np.zeros(n_frames) for a, b in combinations(stims, 2)}
+    for _ in range(n_splits):
+        sub_rng = np.random.default_rng(int(rng.integers(0, 2**31 - 1)))
+        halves: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+        for s in stims:
+            i1, i2 = _half_masks(pools[s], sub_rng)
+            if len(i1) == 0 or len(i2) == 0:
+                raise ValueError(f"class {s!r} has too few units to split in half")
+            halves[s] = (
+                _project(trial_tensor[i1].mean(axis=0)),
+                _project(trial_tensor[i2].mean(axis=0)),
+            )
+        for a, b in combinations(stims, 2):
+            diff1 = halves[a][0] - halves[b][0]
+            diff2 = halves[a][1] - halves[b][1]
+            accum[frozenset({a, b})] += np.einsum("ij,ij->i", diff1, diff2)
+
+    out: dict[frozenset[str], np.ndarray] = {}
+    for pk, d2 in accum.items():
+        d2 = d2 / n_splits
+        out[pk] = np.sign(d2) * np.sqrt(np.abs(d2))
+    return out
 
 
 def subsample_population_run_pipeline(
@@ -506,6 +707,8 @@ def subsample_population_run_pipeline(
     n_subsamples: int = 20,
     n_components: int = 10,
     seed: int = 42,
+    groups: np.ndarray | None = None,
+    n_cv_splits: int = 20,
 ) -> list[dict]:
     """Equal-population control: subsample neurons, recompute trajectories + distances.
 
@@ -530,13 +733,18 @@ def subsample_population_run_pipeline(
         - ``"trajectories"``: ``{stim: (n_frames, n_match)}``.
         - ``"distances_full"``: pair → ``(n_frames,)`` distances.
         - ``"distances_top3_pc"``: pair → ``(n_frames,)`` distances.
+        - ``"distances_cv_full"``: pair → ``(n_frames,)`` bias-corrected
+          distances from :func:`crossvalidated_distance` (``groups`` and
+          ``n_cv_splits`` are forwarded). Raw distances carry a
+          ``sqrt(N (1/n_a + 1/n_b))`` noise floor; use this key when
+          comparing magnitudes across areas or pairs.
         - ``"col_indices"``: shape ``(n_match,)``, which neurons were sampled.
 
     Notes:
         Bootstrap envelopes and shuffle nulls are NOT recomputed per subsample
         (compute cost would 20×). The cross-area-ranking question is answered
-        by comparing the median ± IQR of the observed distances across the 20
-        subsamples.
+        by comparing the median ± IQR of the bias-corrected distances across
+        the 20 subsamples.
     """
     rng = np.random.default_rng(seed)
     n_neurons = trial_tensor.shape[2]
@@ -565,6 +773,10 @@ def subsample_population_run_pipeline(
             "distances_top3_pc": pairwise_trajectory_distance(
                 traj, metric="top_pcs", pca=pca, n_pcs=3
             ),
+            "distances_cv_full": crossvalidated_distance(
+                sub_tensor, label_arr, metric="full",
+                n_splits=n_cv_splits, seed=sub_seed, groups=groups,
+            ),
             "col_indices": col_indices,
         })
     return out
@@ -578,6 +790,7 @@ def subsample_clip_trials_run_pipeline(
     n_subsamples: int = 20,
     n_components: int = 10,
     seed: int = 42,
+    n_cv_splits: int = 20,
 ) -> list[dict]:
     """Clip-trial subsampling control: trim Clip trial count, recompute.
 
@@ -632,6 +845,10 @@ def subsample_clip_trials_run_pipeline(
             "distances_full": pairwise_trajectory_distance(traj, metric="full"),
             "distances_top3_pc": pairwise_trajectory_distance(
                 traj, metric="top_pcs", pca=pca, n_pcs=3
+            ),
+            "distances_cv_full": crossvalidated_distance(
+                sub_tensor, sub_labels, metric="full",
+                n_splits=n_cv_splits, seed=sub_seed,
             ),
         })
     return out
