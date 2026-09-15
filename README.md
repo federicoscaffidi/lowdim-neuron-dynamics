@@ -59,9 +59,22 @@ this file from
     https://huggingface.co/datasets/NeuroBLab/MICrONS/resolve/main/microns.h5
 
 (`microns_datacleaner/downloader.py`, `download_functional_data`) and expects
-it at the path above. `<TODO: Federico>` — confirm this is the file the
-committed results were produced from, and whether the HF dataset has a
-revision to pin. Then:
+it at the path above. Confirmed by the authors as the file the committed
+results were produced from; 20 638 694 845 bytes, HF dataset revision
+`79c7c55fec8484ebffd1cef67cfa433e63f32a03` at the time of writing.
+
+The first code cell after the constants in `notebooks/eda_preproc.ipynb`
+downloads it automatically if it is missing (no CAVE credentials needed) and
+checks the byte count. The package downloader cannot resume, so on a flaky
+connection prefer:
+
+```bash
+mkdir -p "$MICRONS_DATADIR/functional"
+curl -L -C - -o "$MICRONS_DATADIR/functional/microns_functional.h5" \
+  https://huggingface.co/datasets/NeuroBLab/MICrONS/resolve/main/microns.h5
+```
+
+Then:
 
 ```bash
 export MICRONS_DATADIR=/path/to/dir            # default if unset: ../neuroscience
