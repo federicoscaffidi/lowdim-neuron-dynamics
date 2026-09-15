@@ -1071,16 +1071,26 @@ def plot_pairwise_distance_time_course(
     metric_label: str,
     *,
     null_p95: dict[frozenset[str], float] | None = None,
+    cv_distances: dict[frozenset[str], np.ndarray] | None = None,
     ax: plt.Axes | None = None,
     pair_palette: dict[frozenset[str], str] | None = None,
     pair_labels: dict[frozenset[str], str] | None = None,
 ) -> plt.Axes:
-    """Three pairwise-distance time courses on shared axes, with envelopes.
+    """Three pairwise-distance time courses on shared axes.
+
+    Solid line: raw distance (noise-inflated). Dashed line: split-half
+    bias-corrected distance from :func:`crossvalidated_distance`. Horizontal
+    dashed line: 95th percentile of the shuffle null of the max.
 
     Args:
         distances: pair-keyed dict of ``(n_frames,)`` observed distances.
         envelopes: optional pair-keyed dict with ``"lower"``/``"upper"``
-            shape ``(n_frames,)``. If supplied, drawn as a shaded fill.
+            shape ``(n_frames,)``. Pass ``None``: the bootstrap band of a
+            Euclidean distance sits above the observed curve (see
+            :func:`bootstrap_distance_envelope`) and reads as a plotting
+            error. Kept for backwards compatibility only.
+        cv_distances: optional pair-keyed ``(n_frames,)`` bias-corrected
+            distances, drawn dashed in the pair's colour.
         area_name: used in title.
         metric_label: used in y-axis label (e.g. "Euclidean (full features)").
         null_p95: optional pair-keyed scalar, the 95th percentile of the
@@ -1122,9 +1132,15 @@ def plot_pairwise_distance_time_course(
                 x, envelopes[pair]["lower"], envelopes[pair]["upper"],
                 color=color, alpha=0.2,
             )
+        if cv_distances and pair in cv_distances:
+            ax.plot(x, cv_distances[pair], color=color, linewidth=1.4,
+                    linestyle=(0, (4, 2)), alpha=0.9,
+                    label=f"{label} (bias-corrected)")
         if null_p95 and pair in null_p95:
-            ax.axhline(null_p95[pair], color=color, linestyle="--",
-                       alpha=0.6, linewidth=1)
+            ax.axhline(null_p95[pair], color=color, linestyle=":",
+                       alpha=0.7, linewidth=1.2)
+    if null_p95:
+        ax.plot([], [], color="grey", linestyle=":", label="null 95th pct (max over frames)")
     ax.set_xlabel("Frame")
     ax.set_ylabel(metric_label)
     ax.set_title(f"{area_name}: pairwise trajectory distance ({metric_label})")
@@ -1146,14 +1162,22 @@ def plot_cross_area_monet2_trippy(
     per_area_envelopes: dict[str, dict[str, np.ndarray]] | None,
     metric_label: str,
     *,
+    per_area_cv: dict[str, np.ndarray] | None = None,
+    per_area_null_p95: dict[str, float] | None = None,
     ax: plt.Axes | None = None,
 ) -> plt.Axes:
     """Headline figure: Monet2↔Trippy distance time course, all four areas.
 
+    Solid: raw distance. Dashed: bias-corrected (split-half) distance.
+    Dotted horizontal: null 95th percentile of the max.
+
     Args:
         per_area_distances: area → ``(n_frames,)`` Monet2↔Trippy distance.
-        per_area_envelopes: area → dict with ``"lower"``/``"upper"``.
+        per_area_envelopes: area → dict with ``"lower"``/``"upper"``. Pass
+            ``None`` (biased band; see :func:`bootstrap_distance_envelope`).
         metric_label: used in y-axis label.
+        per_area_cv: area → ``(n_frames,)`` bias-corrected distance.
+        per_area_null_p95: area → scalar null threshold.
         ax: matplotlib axes; created if None.
     """
     if ax is None:
@@ -1169,6 +1193,14 @@ def plot_cross_area_monet2_trippy(
                 per_area_envelopes[area]["upper"],
                 color=color, alpha=0.2,
             )
+        if per_area_cv and area in per_area_cv:
+            ax.plot(x, per_area_cv[area], color=color, linewidth=1.4,
+                    linestyle=(0, (4, 2)), alpha=0.9, label=f"{area} (bias-corrected)")
+        if per_area_null_p95 and area in per_area_null_p95:
+            ax.axhline(per_area_null_p95[area], color=color, linestyle=":",
+                       alpha=0.7, linewidth=1.2)
+    if per_area_null_p95:
+        ax.plot([], [], color="grey", linestyle=":", label="null 95th pct (max over frames)")
     ax.set_xlabel("Frame")
     ax.set_ylabel(metric_label)
     ax.set_title(f"Monet2↔Trippy distance across cortical areas ({metric_label})")

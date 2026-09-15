@@ -131,21 +131,39 @@ area. Experiment 1 averages each trial to one vector per trial, fits PCA per
 area, and scores class separability with a class-balanced silhouette on the top
 3 PCs (20 balanced subsamples) and 5-fold stratified cross-validated
 multinomial logistic regression on the full neuron matrix, each against a
-100-shuffle label-permutation null; controls: every area subsampled to AL's
-414 neurons (20 draws) and a `log1p` sensitivity run. Experiment 2 keeps the
-time axis: per area and class it builds a trial-averaged 75 × N trajectory,
-fits PCA on the stacked trajectories, and measures frame-wise Euclidean
-distance between class pairs in the full neuron space and in the top-3 PC
-space, with 1000 class-stratified bootstrap envelopes, a 100-shuffle null on
-the maximum distance, an onset-latency estimate, an equal-population control,
-and a Clip-trial subsampling control. Experiment 3 runs the experiment 2
-pipeline on Clip trials only, with labels from the movie's content category.
+1000-shuffle label-permutation null (100 inside the equal-population
+control); controls: every area subsampled to AL's 414 neurons (20 draws) and
+a `log1p` sensitivity run. Experiment 2 keeps the time axis: per area and
+class it builds a trial-averaged 75 × N trajectory, fits PCA on the stacked
+trajectories, and measures frame-wise Euclidean distance between class pairs
+in the full neuron space and in the top-3 PC space. Significance per pair:
+the observed maximum over frames against a 1000-permutation null of the
+maximum (so the 75 frames are corrected for by construction — max-T, which
+is less conservative than Bonferroni's 0.05/75 but controls the same
+family-wise error rate); Holm over the 12 (area × pair) tests of each metric;
+onset latency = first frame whose observed distance exceeds the null's 95th
+percentile, reported only for Holm-significant pairs. Because the raw
+distance carries a `sqrt(N·(1/n_A + 1/n_B))` noise floor, a split-half
+bias-corrected distance is reported alongside it and is the one drawn as the
+dashed curve in the figures. Controls: equal population and Clip-trial
+subsampling. Experiment 3 runs the experiment 2 pipeline on Clip trials only,
+with labels from the movie's content category, and permutes labels between
+*clips* (377 trials come from 237 clips) rather than between trials.
 All randomness is derived from `RANDOM_SEED = 42`.
 
 ## Limitations
 
 - One session (`7_5`) of fourteen was analysed; the `cross_session_summary.csv`
-  files and the "cross-session" figures contain that session only.
+  files and the "cross-session" figures contain that session only. All
+  fourteen sessions are recordings of the **same animal** (the MICrONS
+  volume is one mouse), so a multi-session run would test consistency across
+  recordings, not across animals.
+- The three stimulus classes are not controlled for low-level image
+  statistics (mean luminance, RMS contrast, motion energy). Any class
+  separation reported here is consistent with the areas encoding such
+  features rather than "naturalness" or "content category"; the frames are
+  in the H5 (`/videos/`), so this control is feasible but not implemented.
+  `<TODO: Federico>` — decide whether to add it.
 - The committed notebooks were edited after their last execution (import cells
   and the cells that write `trajectories.npz` have no execution count), so the
   committed outputs are from an earlier notebook state. A full re-run is

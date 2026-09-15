@@ -530,12 +530,17 @@ def plot_cross_area_three_pairs(
     metric_label: str,
     *,
     metric_key: str = "distances_full",
-    envelope_key: str = "envelopes_full",
+    envelope_key: str | None = None,
+    cv_key: str | None = "cv_full",
+    null_key: str | None = "null_full",
 ):
     """Cross-area headline: 1×3 panels, one per category pair.
 
     Each panel shows that pair's distance time course across all four
-    cortical areas (V1, AL, LM, RL) with bootstrap envelopes shaded.
+    cortical areas (V1, AL, LM, RL): raw distance solid, split-half
+    bias-corrected distance dashed, null 95th percentile of the max dotted.
+    The bootstrap band is no longer drawn by default (``envelope_key=None``);
+    it is biased upward and reads as a plotting error.
 
     Args:
         per_area_results: ``{area: {distances_full, distances_top3, envelopes_full,
@@ -546,7 +551,12 @@ def plot_cross_area_three_pairs(
             distances (default ``"distances_full"``; alternative
             ``"distances_top3"`` for the top-3 PC metric).
         envelope_key: Key into ``per_area_results[area]`` for the bootstrap
-            envelopes (default ``"envelopes_full"``).
+            envelopes; ``None`` (default) draws no band.
+        cv_key: Key for the bias-corrected distances (default ``"cv_full"``;
+            ``"cv_top3"`` for the top-3 PC metric); ``None`` skips it.
+        null_key: Key for the shuffle null of the max (default
+            ``"null_full"``; ``"null_top3"``); its 95th percentile is drawn
+            as a dotted line per area. ``None`` skips it.
 
     Returns:
         ``matplotlib.figure.Figure`` with 1×3 axes: one panel per pair
@@ -572,12 +582,25 @@ def plot_cross_area_three_pairs(
             x = np.arange(len(d))
             ax.plot(x, d, color=area_palette.get(area, "grey"),
                     linewidth=2, label=area)
-            env = res[envelope_key].get(pair)
+            env = res[envelope_key].get(pair) if envelope_key else None
             if env is not None:
                 ax.fill_between(
                     x, env["lower"], env["upper"],
                     color=area_palette.get(area, "grey"), alpha=0.18,
                 )
+            cv = res[cv_key].get(pair) if cv_key else None
+            if cv is not None:
+                ax.plot(x, cv, color=area_palette.get(area, "grey"),
+                        linewidth=1.3, linestyle=(0, (4, 2)), alpha=0.9)
+            null = res[null_key].get(pair) if null_key else None
+            if null is not None:
+                ax.axhline(float(np.percentile(null, 95)),
+                           color=area_palette.get(area, "grey"),
+                           linestyle=":", alpha=0.7, linewidth=1.1)
+        if j == 0:
+            ax.plot([], [], color="grey", linewidth=2, label="raw")
+            ax.plot([], [], color="grey", linestyle=(0, (4, 2)), label="bias-corrected")
+            ax.plot([], [], color="grey", linestyle=":", label="null 95th pct")
         ax.set_xlabel("Frame")
         if j == 0:
             ax.set_ylabel(metric_label)

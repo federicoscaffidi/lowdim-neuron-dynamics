@@ -924,6 +924,20 @@ def plot_cumulative_variance(
     return ax
 
 
+def format_empirical_p(p: float, n_null: int) -> str:
+    """Render an empirical p-value, showing the resolution floor explicitly.
+
+    ``p = (1 + k) / (1 + n_null)`` cannot go below ``1 / (1 + n_null)``. When
+    ``p`` sits at that floor every test in a figure prints the same number
+    (with 100 shuffles: 0.010 everywhere), which reads as a bug. Print
+    ``p < 0.001``-style instead so the floor is visible.
+    """
+    floor = 1.0 / (1 + n_null)
+    if p <= floor * (1 + 1e-9):
+        return f"p < {floor:.3g}"
+    return f"p = {p:.3f}"
+
+
 def _plot_metric_with_null(
     observed: float,
     null_distribution: np.ndarray,
@@ -949,7 +963,7 @@ def _plot_metric_with_null(
     ax.set_xlabel(metric_label)
     ax.set_ylabel("Count")
     ax.set_title(
-        f"{area_name}: {metric_label} (empirical p = {p:.3f}, "
+        f"{area_name}: {metric_label} (empirical {format_empirical_p(p, n_shuffles)}, "
         f"n_shuffles = {n_shuffles})"
     )
     ax.legend(loc="best", fontsize=8)
@@ -1131,12 +1145,14 @@ def plot_cross_area_metric_bars(
         ax.scatter(x[i], q50, color="white", edgecolor="darkgrey",
                    s=30, zorder=4, marker="_", linewidths=2)
 
-    # Empirical p-values above bars.
+    # Empirical p-values above bars (uncorrected; the CSV carries p_holm).
+    # At the resolution floor 1/(n_shuffles+1) every bar would print the same
+    # number, so the floor is printed as "p < ...".
     y_max = ax.get_ylim()[1]
     for i, p in enumerate(p_values):
         sig = "*" if p < 0.05 else "ns"
         ax.text(x[i], observed[i] + 0.02 * y_max,
-                f"p={p:.3f}\n{sig}",
+                f"{format_empirical_p(p, len(nulls[i]))}\n{sig}",
                 ha="center", va="bottom", fontsize=8)
 
     if chance is not None:
