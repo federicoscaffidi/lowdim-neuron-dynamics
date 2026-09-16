@@ -24,6 +24,8 @@ microns_datacleaner==0.2.1.7  # guessed (.venv dist-info)  MicronsFunctionalRead
 jupyterlab                # no version readable anywhere — unpinned <TODO: Federico>
 nbclient                  # no version readable anywhere — unpinned <TODO: Federico>
 nbformat                  # no version readable anywhere — unpinned <TODO: Federico>
+kaleido                   # plotly static export (experiment1 cell 52 write_image); unpinned <TODO: Federico>.
+                          # kaleido >= 1.0 needs a Chrome/Chromium install (`plotly_get_chrome`); 0.2.1 bundles its own.
 
 # --- convert_svgs.py only (SVG -> PDF for the three report figures) ---
 cairosvg                  # no version readable anywhere — unpinned <TODO: Federico>
