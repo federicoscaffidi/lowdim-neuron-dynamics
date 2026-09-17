@@ -7,7 +7,7 @@ The module is organized in four sections:
 (c) Analysis:    deep-dive diagnostics (per-neuron stats, correlation, drift).
 (d) Plotting:    thin matplotlib wrappers; all accept an optional `ax`.
 
-Design constraints (see docs/specs/2026-04-30-microns-eda-design.md):
+Design constraints:
 - Data functions are pure: no plotting, no file writes.
 - Plotting functions accept `ax` so plots compose.
 - Every public function has a NumPy-style docstring with Args, Returns, Notes.
@@ -1047,6 +1047,22 @@ def plot_trial_timeline(
     return ax
 
 
+def get_video_clip(reader, condition_hash: str) -> np.ndarray | None:
+    """Frames of one video as a ``(frames, width, height)`` array, or ``None``.
+
+    ``MicronsFunctionalReader.get_video_data`` returned a ``(clip, stim_type)``
+    tuple in older releases and returns a dict (keys ``clip``, ``stim_type``,
+    ``fps``, ...) from 0.2.1.x, but still returns ``(None, None)`` when the
+    hash is not in ``/videos/``. This wraps both.
+    """
+    out = reader.get_video_data(condition_hash)
+    if isinstance(out, dict):
+        return out.get("clip")
+    if isinstance(out, tuple):
+        return out[0]
+    return None
+
+
 def plot_stim_examples(reader, stim_map: dict[str, str]) -> plt.Figure:
     """Show one mid-clip frame from each of Clip / Monet2 / Trippy.
 
@@ -1077,7 +1093,7 @@ def plot_stim_examples(reader, stim_map: dict[str, str]) -> plt.Figure:
     fig, axes = plt.subplots(1, 3, figsize=(12, 4))
     for ax, stim_type in zip(axes, ["Clip", "Monet2", "Trippy"]):
         if stim_type in examples:
-            clip, _ = reader.get_video_data(examples[stim_type])
+            clip = get_video_clip(reader, examples[stim_type])
             if clip is not None:
                 mid = clip.shape[0] // 2
                 ax.imshow(clip[mid], cmap="gray")

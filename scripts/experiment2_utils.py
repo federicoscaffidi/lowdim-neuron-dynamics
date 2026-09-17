@@ -1,4 +1,4 @@
-"""option3_trajectories_utils: helper module for the time-resolved PCA trajectories notebook.
+"""experiment2_utils: helper module for the time-resolved PCA trajectories notebook (experiment 2).
 
 The module is organized in four sections:
 
@@ -14,7 +14,7 @@ The module is organized in four sections:
     panels, cross-area headline, equal-population comparison, Clip-subsampling
     comparison.
 
-Design constraints (see docs/specs/2026-05-04-option3-trajectories-design.md):
+Design constraints:
 - Data functions are pure: no plotting, no file writes (except the explicit
   save_trajectories / load_trajectories).
 - Plotting functions accept ``ax`` (or return a Figure for Plotly) so plots
@@ -23,7 +23,7 @@ Design constraints (see docs/specs/2026-05-04-option3-trajectories-design.md):
 - No magic constants: anything tunable is a parameter with a sensible default.
 - All randomness is seeded via the ``seed`` (or ``random_state``) parameter;
   sub-seeds are derived deterministically from the master seed.
-- Reuses option2_pca_utils.preprocess_responses (Stage A) and
+- Reuses experiment1_utils.preprocess_responses (Stage A) and
   microns_eda.compute_clean_trial_indices.
 """
 
@@ -37,7 +37,7 @@ import numpy as np
 import pandas as pd
 from sklearn.decomposition import PCA
 
-# Reuse Option 2's stim conventions for visual consistency across the project.
+# Reuse experiment 1's stim conventions for visual consistency across the project.
 from scripts.experiment1_utils import STIM_COLORS, STIM_MARKERS, STIM_ORDER
 
 
@@ -69,7 +69,7 @@ def build_stim_trajectories(
 
     Args:
         responses_preprocessed: shape ``(n_neurons, total_timesteps)``,
-            output of ``option2_pca_utils.preprocess_responses``.
+            output of ``experiment1_utils.preprocess_responses``.
         trial_boundaries: shape ``(n_trials + 1,)``, cumulative timestep
             counts as returned by ``microns_eda.load_session_responses``.
         clean_trial_indices: shape ``(n_clean_trials,)``, indices of trials
@@ -91,7 +91,7 @@ def build_stim_trajectories(
         trajectory is a much tighter mean estimate than the synthetics.
         The Phase 9 Clip-subsampling control addresses this directly.
     """
-    # Decode area labels (matches the convention in option2_pca_utils).
+    # Decode area labels (matches the convention in experiment1_utils).
     if brain_areas.dtype.kind in ("S", "O") and len(brain_areas) > 0:
         sample = brain_areas[0]
         if isinstance(sample, bytes):
@@ -543,7 +543,7 @@ def shuffle_null_max_distance(
 
     Notes:
         Empirical p-value per pair: ``p = (1 + (null >= observed_max).sum())
-        / (1 + n_shuffles)`` (pseudocount-1, matches Option 2's convention).
+        / (1 + n_shuffles)`` (pseudocount-1, matches experiment 1's convention).
     """
     rng = np.random.default_rng(seed)
     label_arr = np.asarray(labels)
@@ -887,10 +887,10 @@ def plot_psth_per_stim_area(
         ax: matplotlib axes; created if None.
         palette: Optional dict ``{stim: hex_color}`` overriding
             ``STIM_COLORS``. Used when the same plotter is reused with
-            different stim labels (e.g. Option 4's category palette).
-            ``None`` keeps Option 3 behaviour.
+            different stim labels (e.g. experiment 3's category palette).
+            ``None`` keeps experiment 2 behaviour.
         stim_order: Optional list of stim keys controlling iteration
-            order, overriding ``STIM_ORDER``. ``None`` keeps Option 3
+            order, overriding ``STIM_ORDER``. ``None`` keeps experiment 2
             behaviour.
 
     Returns:
@@ -951,10 +951,10 @@ def plot_trajectory_2d(
         annotate_every: gap between time-annotation labels.
         palette: Optional dict ``{stim: hex_color}`` overriding
             ``STIM_COLORS``. Used when the same plotter is reused with
-            different stim labels (e.g. Option 4's category palette).
-            ``None`` keeps Option 3 behaviour.
+            different stim labels (e.g. experiment 3's category palette).
+            ``None`` keeps experiment 2 behaviour.
         stim_order: Optional list of stim keys controlling iteration
-            order, overriding ``STIM_ORDER``. ``None`` keeps Option 3
+            order, overriding ``STIM_ORDER``. ``None`` keeps experiment 2
             behaviour.
 
     Returns:
@@ -1018,10 +1018,10 @@ def plot_trajectory_3d_plotly(
     Args:
         palette: Optional dict ``{stim: hex_color}`` overriding
             ``STIM_COLORS``. Used when the same plotter is reused with
-            different stim labels (e.g. Option 4's category palette).
-            ``None`` keeps Option 3 behaviour.
+            different stim labels (e.g. experiment 3's category palette).
+            ``None`` keeps experiment 2 behaviour.
         stim_order: Optional list of stim keys controlling iteration
-            order, overriding ``STIM_ORDER``. ``None`` keeps Option 3
+            order, overriding ``STIM_ORDER``. ``None`` keeps experiment 2
             behaviour.
     """
     import plotly.graph_objects as go
@@ -1098,12 +1098,12 @@ def plot_pairwise_distance_time_course(
         ax: matplotlib axes; created if None.
         pair_palette: Optional dict
             ``{frozenset({a, b}): hex_color}`` overriding the hardcoded
-            Clip/Monet2/Trippy pair colors. ``None`` keeps Option 3
+            Clip/Monet2/Trippy pair colors. ``None`` keeps experiment 2
             behaviour.
         pair_labels: Optional dict
             ``{frozenset({a, b}): label_str}`` overriding the hardcoded
             Clip↔Monet2 / Clip↔Trippy / Monet2↔Trippy labels. ``None``
-            keeps Option 3 behaviour.
+            keeps experiment 2 behaviour.
 
     Returns:
         The axes drawn on.

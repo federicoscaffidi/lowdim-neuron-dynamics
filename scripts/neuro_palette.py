@@ -6,7 +6,7 @@ for white slides and printable handouts rather than the dark deck.
 
 Usage in a notebook:
 
-    from neuro_palette import (
+    from scripts.neuro_palette import (
         STIMULUS, SUBCATEGORY, NEUTRAL, HIGHLIGHT, THRESHOLD,
         apply_style, color_for,
     )
@@ -23,14 +23,14 @@ import matplotlib as mpl
 # Palettes
 # ---------------------------------------------------------------------------
 
-# Stimulus class palette (Option 2, Option 3, EDA stim exemplars).
+# Stimulus class palette (experiment 1, experiment 2, EDA stim exemplars).
 STIMULUS: dict[str, str] = {
     "Clip":   "#60A5FA",  # sky blue
     "Monet2": "#F472B6",  # rose
     "Trippy": "#34D399",  # emerald
 }
 
-# Within-Clip subcategory palette (Option 4).
+# Within-Clip subcategory palette (experiment 3).
 SUBCATEGORY: dict[str, str] = {
     "Cinematic": "#F87171",  # coral red
     "sports1m":  "#22D3EE",  # cyan

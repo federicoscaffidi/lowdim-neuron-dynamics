@@ -1,4 +1,4 @@
-"""option2_pca_utils: helper module for the trial-averaged PCA notebook.
+"""experiment1_utils: helper module for the trial-averaged PCA notebook (experiment 1).
 
 The module is organized in four sections:
 
@@ -11,7 +11,7 @@ The module is organized in four sections:
     comparison plots.
 (d) Cross-session aggregation: read per-session CSVs and plot.
 
-Design constraints (see docs/specs/2026-05-02-pca-design.md):
+Design constraints:
 - Data functions are pure: no plotting, no file writes.
 - Plotting functions accept ``ax`` (or ``fig`` for Plotly) so plots compose.
 - Every public function has a NumPy-style docstring with Args, Returns, Notes.

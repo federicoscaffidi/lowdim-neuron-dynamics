@@ -1,4 +1,4 @@
-"""option4_clip_utils: helpers for the Clip-category trajectory analysis (Option 4).
+"""experiment3_utils: helpers for the Clip-category trajectory analysis (experiment 3).
 
 Sections:
 
@@ -9,7 +9,7 @@ Sections:
 (c) Pipeline glue for Part 2: restrict-to-Clip helper and the cross-area
     headline plotter (1×3 panels, all three pairs symmetrically).
 
-Design constraints (see docs/specs/2026-05-07-option4-clip-categories-design.md):
+Design constraints:
 - Pure data functions: no plotting, no file writes.
 - Plotting functions accept `ax` (or return Figure for multi-panel layouts).
 - NumPy-style docstrings + type hints on every public function.
@@ -25,9 +25,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from scripts.microns_eda import get_video_clip
+
 # ---------------------------------------------------------------------------
-# Palette (distinct from option2_pca_utils.STIM_COLORS so figures from
-# Option 4 stay visually distinguishable from Option 2 / Option 3 in the
+# Palette (distinct from experiment1_utils.STIM_COLORS so figures from
+# experiment 3 stay visually distinguishable from experiments 1-2 in the
 # final report).
 # ---------------------------------------------------------------------------
 
@@ -246,6 +248,22 @@ def _read_clip_movie_names(h5_path: str | Path, hashes: set[str]) -> dict[str, s
     return out
 
 
+def _clip_n_frames(h5_path: str | Path, original_hash: str) -> int | None:
+    """Frame count of one video from the dataset shape alone (no frames read).
+
+    ``MicronsFunctionalReader.get_video_data`` loads the whole ``clip`` array;
+    for the inventory only ``shape[0]`` is needed, and loading all 237 clips'
+    frames costs gigabytes. The H5 key is the hash with ``/`` encoded as
+    ``%2F`` (``MicronsFunctionalReader._encode_hash``).
+    """
+    key = f"videos/{original_hash.replace('/', '%2F')}"
+    with h5py.File(h5_path, "r") as f:
+        if key not in f:
+            return None
+        return int(f[key]["clip"].shape[0])
+
+
+
 def build_clip_inventory(
     reader,
     hashes_per_trial: np.ndarray,
@@ -293,8 +311,7 @@ def build_clip_inventory(
         category = hash_to_category.get(h, "")
         if category not in CATEGORY_ORDER:
             continue
-        clip, _stim = reader.get_video_data(h)
-        n_frames = int(clip.shape[0]) if clip is not None else None
+        n_frames = _clip_n_frames(h5_path, h)
         rows.append({
             "hash": h,
             "category": category,
@@ -383,7 +400,7 @@ def plot_category_exemplars(
                 ax.axis("off")
                 continue
             row = sub.iloc[j]
-            clip, _ = reader.get_video_data(row["hash"])
+            clip = get_video_clip(reader, row["hash"])
             if clip is None:
                 ax.text(0.5, 0.5, "missing", ha="center", va="center",
                         transform=ax.transAxes, color="firebrick", fontsize=8)
@@ -440,7 +457,7 @@ def plot_frame_strip_per_category(
                 axes[i, j].axis("off")
             continue
         row = sub.iloc[0]
-        clip, _ = reader.get_video_data(row["hash"])
+        clip = get_video_clip(reader, row["hash"])
         if clip is None:
             for j in range(n_frames):
                 ax = axes[i, j]
@@ -503,7 +520,7 @@ def plot_full_thumbnail_grid(
     for i, row in enumerate(inventory_df.itertuples(index=False)):
         ax = axes_flat[i]
         ax.set_xticks([]); ax.set_yticks([])
-        clip, _ = reader.get_video_data(row.hash)
+        clip = get_video_clip(reader, row.hash)
         if clip is None:
             ax.text(0.5, 0.5, "missing", ha="center", va="center",
                     transform=ax.transAxes, color="firebrick", fontsize=7)
@@ -545,7 +562,7 @@ def plot_cross_area_three_pairs(
     Args:
         per_area_results: ``{area: {distances_full, distances_top3, envelopes_full,
             envelopes_top3, ...}}`` as built by the Part-2 notebook code (mirrors
-            the structure used in Option 3's Part 6+).
+            the structure used in experiment 2's Part 6+).
         metric_label: y-axis label, e.g. ``"Euclidean (full features)"``.
         metric_key: Key into ``per_area_results[area]`` for the observed
             distances (default ``"distances_full"``; alternative

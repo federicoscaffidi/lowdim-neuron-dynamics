@@ -1,36 +1,28 @@
-# Generated 2026-09-15 from the actual imports in scripts/*.py, notebooks/*.ipynb
-# and convert_svgs.py. Nothing here is copied from the previous requirements.txt.
+# Pinned from `pip freeze` in the environment that produced every committed
+# result on 2026-09-16 (Python 3.11.14, macOS arm64). Only the packages the
+# code imports, plus what is needed to execute the notebooks; their transitive
+# dependencies are resolved by pip. The full freeze is not kept.
 #
-# VERSION CAVEAT — every pin below is a GUESS. The only readable versions on this
-# machine are the dist-info stubs in a hollow .venv (Python 3.9.6) that cannot
-# run the code; the committed results were produced under Python 3.11.15
-# (eda_preproc) and 3.12.2 (experiment1-3) per notebook metadata, with unknown
-# package versions. Re-pin from the environment used for the re-run:
-#   <TODO: Federico>  pip freeze > requirements.txt  (after the re-run)
-#
-# Python: 3.11 or 3.12 (the kernel versions recorded in the notebooks).
+# Python: 3.11 (3.10+ required: microns_datacleaner uses `match` statements).
 
 # --- imported by scripts/ and notebooks/ ---
-numpy==2.0.2              # guessed (.venv dist-info)  all modules
-pandas==2.3.3             # guessed (.venv dist-info)  all modules
-matplotlib==3.9.4         # guessed (.venv dist-info)  all modules
-scikit-learn==1.6.1       # guessed (.venv dist-info)  experiment1_utils, experiment2_utils
-h5py==3.14.0              # guessed (.venv dist-info)  microns_eda, experiment3_utils
-plotly==6.7.0             # guessed (.venv dist-info)  3-D figures (write_html)
-seaborn==0.13.2           # guessed (.venv dist-info)  eda_preproc.ipynb only
-microns_datacleaner==0.2.1.7  # guessed (.venv dist-info)  MicronsFunctionalReader; source index not recorded
+numpy==2.0.2
+pandas==2.3.3
+matplotlib==3.9.4
+scikit-learn==1.6.1          # PCA, silhouette, logistic regression
+h5py==3.14.0                 # direct reads of microns_functional.h5
+plotly==6.7.0                # interactive 3-D figures (write_html)
+seaborn==0.13.2              # eda_preproc.ipynb only
+Microns-DataCleaner==0.2.1.7 # MicronsFunctionalReader + the H5 downloader (PyPI name)
 
 # --- needed to execute the notebooks (not imported by project code) ---
-jupyterlab                # no version readable anywhere — unpinned <TODO: Federico>
-nbclient                  # no version readable anywhere — unpinned <TODO: Federico>
-nbformat                  # no version readable anywhere — unpinned <TODO: Federico>
-kaleido                   # plotly static export (experiment1 cell 52 write_image); unpinned <TODO: Federico>.
-                          # kaleido >= 1.0 needs a Chrome/Chromium install (`plotly_get_chrome`); 0.2.1 bundles its own.
+jupyterlab==4.6.3
+ipykernel==7.3.0
+nbclient==0.11.0
+nbformat==5.11.1
+kaleido==1.4.0               # plotly static export (experiment1: v1_3d_*.svg/png).
+                             # kaleido >= 1.0 needs a Chrome/Chromium; run
+                             # `python -c "import plotly.io as pio; pio.get_chrome()"` once.
 
-# --- convert_svgs.py only (SVG -> PDF for the three report figures) ---
-cairosvg                  # no version readable anywhere — unpinned <TODO: Federico>
-
-# --- declared in the old requirements.txt but never imported by project code ---
-# scipy==1.13.1           # present in .venv; not imported anywhere
-# cloud-volume==12.13.1   # present in .venv; not imported anywhere (may be a
-#                         # transitive dependency of microns_datacleaner — unverified)
+# --- scripts/convert_svgs.py only (SVG -> PDF for the report figures) ---
+CairoSVG==2.9.1
