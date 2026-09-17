@@ -153,7 +153,7 @@ not recorded).
 **Check.**
 
 ```bash
-grep '^V1,5485,classifier' results/exp1_trial_averaged_pca/7_5/silhouette_scores.csv
+grep '^V1,5485,classifier.*,all_neurons,' results/exp1_trial_averaged_pca/7_5/silhouette_scores.csv
 # expected: V1,5485,classifier,0.988962148962149,0.8035396825396826,...,all_neurons,0.0039960039960039,4.0,,
 ```
 
@@ -185,7 +185,6 @@ figures/
   eda/stim_examples/     one raw frame per Clip category (svg)
   exp*/7_5/              per-experiment figures, numbered by notebook part; slide versions in presentation/
 data/                    git-ignored; the raw H5 is downloaded to data/functional/ (see Quickstart)
-docs/                    review findings, recommendation lists, history-cleanup script
 ```
 
 Experiments 2 and 3 also write a `trajectories.npz` cache (14 MB each) next
